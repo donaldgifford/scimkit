@@ -1,7 +1,7 @@
 ---
 # $schema=https://goreleaser.com/static/schema.json
 # goreleaser config for scimkit
-# Triggered by .forgejo/workflows/release.yml or .github/workflows/release.yml on tag push.
+# Triggered by .github/workflows/release.yml after pr-semver-bump tags the merge commit.
 version: 2
 
 project_name: scimkit

@@ -107,9 +107,9 @@ clean: ## Remove build artifacts
 
 ## Application Services
 
-run: ## Run CLI command
+run: build ## Build then run the CLI
 	@ $(MAKE) --no-print-directory log-$@
-	./build/bin/repo-guardian
+	@$(BIN_DIR)/$(PROJECT_NAME)
 
 run-local: build ## Run exporter with local config
 	@ $(MAKE) --no-print-directory log-$@
@@ -138,15 +138,6 @@ check: lint test ## Quick pre-commit check (lint + test)
 # =============================================================================
 # Release Targets
 # =============================================================================
-
-release: ## Create release (use with TAG=v1.0.0)
-	@ $(MAKE) --no-print-directory log-$@
-	@if [ -z "$(TAG)" ]; then \
-		echo "Error: TAG is required. Usage: make release TAG=v1.0.0"; \
-		exit 1; \
-	fi
-	git tag -a $(TAG) -m "Release $(TAG)"
-	git push origin $(TAG)
 
 release-check:
 	@ $(MAKE) --no-print-directory log-$@
