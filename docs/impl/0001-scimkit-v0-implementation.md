@@ -173,7 +173,7 @@ type, and the hand-written typed views.
 - [ ] `Resource`: presence-tracking container; `Get`/`Set`/`Unassign` in
       standard attribute notation; `Clone`; automatic `schemas` array
       maintenance; `Meta` accessors; `null`/`[]`/absent equivalence
-- [ ] Value system: SCIM-typed scalars (`dateTime`, `binary`, `reference`
+- [x] Value system: SCIM-typed scalars (`dateTime`, `binary`, `reference`
       distinct from `string`; `integer` vs `decimal`), multi-valued slices,
       complex max-depth-1 enforcement, at-most-one-`primary` helper
 - [ ] JSON codec: unmarshal (case-folded keys, URN extension containers,
