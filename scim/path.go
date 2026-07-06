@@ -26,7 +26,7 @@ var commonAttributes = []Attribute{
 		Uniqueness: UniquenessNone,
 	},
 	{
-		Name:       "meta",
+		Name:       attrMeta,
 		Type:       TypeComplex,
 		Mutability: MutabilityReadOnly,
 		Returned:   ReturnedDefault,
@@ -39,7 +39,7 @@ var commonAttributes = []Attribute{
 		},
 	},
 	{
-		Name:        "schemas",
+		Name:        attrSchemas,
 		Type:        TypeString,
 		MultiValued: true,
 		CaseExact:   true,

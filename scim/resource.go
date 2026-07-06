@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+// Folded names of the common attributes that Resource handles specially:
+// schemas is derived from content and meta lives in the Meta struct.
+const (
+	attrSchemas = "schemas"
+	attrMeta    = "meta"
+)
+
 // Meta is the resource metadata complex attribute (RFC 7643 §3.1). Zero
 // fields are unassigned.
 type Meta struct {
@@ -112,9 +119,9 @@ func (r *Resource) Get(path string) (any, bool) {
 // from the container, schemas derived, meta projected from the Meta struct.
 func (r *Resource) getCommon(rp resolvedPath) (any, bool) {
 	switch foldName(rp.attr.Name) {
-	case "schemas":
+	case attrSchemas:
 		return r.Schemas(), true
-	case "meta":
+	case attrMeta:
 		mv := r.metaValue()
 		if mv == nil {
 			return nil, false
@@ -187,9 +194,9 @@ func (r *Resource) Set(path string, v any) error {
 
 func (r *Resource) setCommon(rp resolvedPath, path string, v any) error {
 	switch foldName(rp.attr.Name) {
-	case "schemas":
+	case attrSchemas:
 		return ErrMutability(`"schemas" is derived from resource content and cannot be set`)
-	case "meta":
+	case attrMeta:
 		return ErrMutability(`"meta" is set via SetMeta`)
 	default:
 		return setInContainer(r.attrs, rp, path, v)

@@ -176,7 +176,7 @@ type, and the hand-written typed views.
 - [x] Value system: SCIM-typed scalars (`dateTime`, `binary`, `reference`
       distinct from `string`; `integer` vs `decimal`), multi-valued slices,
       complex max-depth-1 enforcement, at-most-one-`primary` helper
-- [ ] JSON codec: unmarshal (case-folded keys, URN extension containers,
+- [x] JSON codec: unmarshal (case-folded keys, URN extension containers,
       silent drop of client-supplied readOnly attrs, schema type checks);
       marshal (declared casing, projection-context parameter, wire
       invariants: capitalized `Resources`/`Operations`, integer pagination
