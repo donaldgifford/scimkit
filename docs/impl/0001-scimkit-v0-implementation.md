@@ -164,7 +164,7 @@ type, and the hand-written typed views.
       `Schema.WithDefaults()` applies RFC 7643 §2.2 defaults so
       hand-authored schemas stay terse; `ParseSchema`/`MarshalJSON`
       round-trip the /Schemas wire form
-- [ ] Case-folded canonical name registry: path → `Attribute` resolution,
+- [x] Case-folded canonical name registry: path → `Attribute` resolution,
       declared-casing emission (wire output never leaks folded names)
 - [x] URN constants: core/extension schema URNs + `api:messages:2.0:*` URNs
 - [x] `Error` type + constructors for all RFC 7644 Table 9 scimTypes plus
