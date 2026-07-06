@@ -183,7 +183,7 @@ type, and the hand-written typed views.
       fields)
 - [x] ID generation: UUIDv4 via `crypto/rand`; reject reserved `bulkId`
       string (RFC 7643 §3.1)
-- [ ] Typed views + conversions: `User` (full §4.1 surface incl. `Name`,
+- [x] Typed views + conversions: `User` (full §4.1 surface incl. `Name`,
       `MultiValue`, addresses, x509, groups read-only), `Group` (§4.2),
       `EnterpriseUser` + `Manager` (§4.3, attached via `User.Enterprise`);
       `ListResponse`, `Meta`, common message types
