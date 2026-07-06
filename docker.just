@@ -2,9 +2,8 @@
 #
 # Docker image build/push pipeline via docker buildx bake. Reads
 # docker-bake.hcl for target definitions. Import this from the main
-# justfile with `import 'docker.just'`.
-
-set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+# justfile with `import 'docker.just'`. Settings (e.g. `set shell`)
+# come from the importing justfile.
 
 # ─── Docker ─────────────────────────────────────────────────────────
 

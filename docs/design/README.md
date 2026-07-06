@@ -28,4 +28,9 @@ docz create design "Your Design Title"
 - **Abandoned**: Design was not pursued
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All Design
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| DESIGN-0001 | scimkit library architecture | In Review | 2026-07-02 | Donald Gifford | [0001-scimkit-library-architecture.md](0001-scimkit-library-architecture.md) |
 <!-- END DOCZ AUTO-GENERATED -->

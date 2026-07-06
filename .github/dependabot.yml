@@ -20,7 +20,7 @@ updates:
       - dependencies
       - github_actions
     assignees:
-      - ${project_owner}
+      - donaldgifford
     groups:
       actions-security:
         applies-to: security-updates
@@ -36,7 +36,7 @@ updates:
       - dependencies
       - docker
     assignees:
-      - ${project_owner}
+      - donaldgifford
     groups:
       docker-security:
         applies-to: security-updates
@@ -52,7 +52,7 @@ updates:
       - dependencies
       - go
     assignees:
-      - ${project_owner}
+      - donaldgifford
     groups:
       gomod-security:
         applies-to: security-updates

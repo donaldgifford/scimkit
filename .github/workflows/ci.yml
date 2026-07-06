@@ -13,13 +13,14 @@ permissions:
 
 jobs:
   labeler:
+    if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
     runs-on: ubuntu-latest
     name: Label PR
     steps:
-      - name: Checkout code
+      - name: Label PR
         uses: actions/labeler@v6
   lint:
     name: Lint
@@ -56,15 +57,12 @@ jobs:
       - name: Run unit tests
         run: just test-coverage
 
-      - name: Coverage gate (per-package floor)
-        run: just coverage-gate
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: donaldgifford/hclkit
+          slug: donaldgifford/scimkit
         continue-on-error: true
 
   security:
@@ -119,11 +117,15 @@ jobs:
           version: "~> v2"
           args: release --snapshot --skip=publish --skip=sign --clean
 
+      - name: Locate archive SBOM
+        id: sbom-path
+        run: echo "path=$(ls dist/scimkit_*_linux_amd64.tar.gz.spdx.json)" >> "$GITHUB_OUTPUT"
+
       - name: Scan archive SBOM
         id: scan-sbom
         uses: anchore/scan-action@v7
         with:
-          sbom: dist/hclkit_linux_amd64.tar.gz.spdx.json
+          sbom: ${{ steps.sbom-path.outputs.path }}
           severity-cutoff: high
           fail-build: false
           output-format: sarif

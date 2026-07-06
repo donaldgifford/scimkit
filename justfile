@@ -5,6 +5,8 @@
 
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
+import 'docker.just'
+
 project_name      := "scimkit"
 project_owner     := "donaldgifford"
 go_package        := "github.com/" + project_owner + "/" + project_name
@@ -136,11 +138,8 @@ release-check:
 release-local:
     @goreleaser release --snapshot --clean --skip=publish --skip=sign
 
-# Tag and push a new release: just release v0.1.0
-[group('release')]
-release tag:
-    @git tag -a {{ tag }} -m "Release {{ tag }}"
-    @git push origin {{ tag }}
+# Releases are cut by CI: label the PR major/minor/patch (or dont-release),
+# and .github/workflows/release.yml bumps + tags + runs goreleaser on merge.
 
 # ─── Composite gates ────────────────────────────────────────────────
 

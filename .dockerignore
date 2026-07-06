@@ -1,6 +1,5 @@
 .git
 .github
-.forgejo
 docs
 dist
 *.md
