@@ -148,10 +148,11 @@ type, and the hand-written typed views.
 
 #### Tasks (phase 1)
 
-- [ ] Vendor RFC 7643 §8.7 schema JSON under `scim/schemas/` — User, Group,
+- [x] Vendor RFC 7643 §8.7 schema JSON under `scim/schemas/` — User, Group,
       Enterprise User (§8.7.1) and ServiceProviderConfig, ResourceType,
-      Schema meta-schemas (§8.7.2) — one file each, provenance header
-      comment with RFC section + extraction method (Open Questions Q3)
+      Schema meta-schemas (§8.7.2) — one file each, provenance +
+      extraction method + validation documented in `scim/schemas/README.md`
+      (Open Questions Q3)
 - [ ] Schema generator (`internal/schemagen`, invoked via `go:generate`):
       vendored JSON → committed `scim/schema_gen.go` with `Schema` /
       `Attribute` values; CI drift check regenerates and fails on diff
