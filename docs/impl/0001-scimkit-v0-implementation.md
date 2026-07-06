@@ -181,7 +181,7 @@ type, and the hand-written typed views.
       marshal (declared casing, projection-context parameter, wire
       invariants: capitalized `Resources`/`Operations`, integer pagination
       fields)
-- [ ] ID generation: UUIDv4 via `crypto/rand`; reject reserved `bulkId`
+- [x] ID generation: UUIDv4 via `crypto/rand`; reject reserved `bulkId`
       string (RFC 7643 §3.1)
 - [ ] Typed views + conversions: `User` (full §4.1 surface incl. `Name`,
       `MultiValue`, addresses, x509, groups read-only), `Group` (§4.2),
