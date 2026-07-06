@@ -153,9 +153,11 @@ type, and the hand-written typed views.
       Schema meta-schemas (§8.7.2) — one file each, provenance +
       extraction method + validation documented in `scim/schemas/README.md`
       (Open Questions Q3)
-- [ ] Schema generator (`internal/schemagen`, invoked via `go:generate`):
+- [x] Schema generator (`internal/schemagen`, invoked via `go:generate`):
       vendored JSON → committed `scim/schema_gen.go` with `Schema` /
-      `Attribute` values; CI drift check regenerates and fails on diff
+      `Attribute` literals (plus hand-written `UserResourceType` /
+      `GroupResourceType`); CI drift check regenerates and fails on diff;
+      round-trip test pins generated values to the vendored fixtures
       (Open Questions Q4)
 - [x] Metadata types: `AttrType`, `Mutability`, `Returned`, `Uniqueness`,
       `Attribute`, `Schema`, `ResourceType`, `SchemaExtension`;

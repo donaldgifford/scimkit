@@ -54,6 +54,11 @@ jobs:
         with:
           experimental: true
 
+      - name: Check generated code is current
+        run: |
+          go generate ./...
+          git diff --exit-code
+
       - name: Run unit tests
         run: just test-coverage
 
