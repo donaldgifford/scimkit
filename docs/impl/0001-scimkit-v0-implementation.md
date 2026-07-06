@@ -157,12 +157,14 @@ type, and the hand-written typed views.
       vendored JSON → committed `scim/schema_gen.go` with `Schema` /
       `Attribute` values; CI drift check regenerates and fails on diff
       (Open Questions Q4)
-- [ ] Metadata types: `AttrType`, `Mutability`, `Returned`, `Uniqueness`,
-      `Attribute`, `Schema`, `ResourceType`, `SchemaExtension`; registry
-      applies RFC 7643 §2.2 defaults so hand-authored schemas stay terse
+- [x] Metadata types: `AttrType`, `Mutability`, `Returned`, `Uniqueness`,
+      `Attribute`, `Schema`, `ResourceType`, `SchemaExtension`;
+      `Schema.WithDefaults()` applies RFC 7643 §2.2 defaults so
+      hand-authored schemas stay terse; `ParseSchema`/`MarshalJSON`
+      round-trip the /Schemas wire form
 - [ ] Case-folded canonical name registry: path → `Attribute` resolution,
       declared-casing emission (wire output never leaks folded names)
-- [ ] URN constants: core/extension schema URNs + `api:messages:2.0:*` URNs
+- [x] URN constants: core/extension schema URNs + `api:messages:2.0:*` URNs
 - [ ] `Error` type + constructors for all RFC 7644 Table 9 scimTypes plus
       `ErrNotFound`/`ErrPreconditionFailed`; wire encode (status as JSON
       string) and decode (accept string or integer status)
