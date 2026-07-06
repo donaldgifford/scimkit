@@ -28,4 +28,9 @@ docz create impl "Your Implementation Title"
 - **Cancelled**: Plan was abandoned
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All Implementation Plans
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| IMPL-0001 | scimkit v0 implementation | In Progress | 2026-07-03 | Donald Gifford | [0001-scimkit-v0-implementation.md](0001-scimkit-v0-implementation.md) |
 <!-- END DOCZ AUTO-GENERATED -->

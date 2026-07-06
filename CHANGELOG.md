@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - Add DESIGN-0001 scimkit library architecture
+- Add IMPL-0001 v0 implementation plan
 
 ### Miscellaneous Tasks
 
