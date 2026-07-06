@@ -170,7 +170,7 @@ type, and the hand-written typed views.
 - [x] `Error` type + constructors for all RFC 7644 Table 9 scimTypes plus
       `ErrNotFound`/`ErrPreconditionFailed`; wire encode (status as JSON
       string) and decode (accept string or integer status)
-- [ ] `Resource`: presence-tracking container; `Get`/`Set`/`Unassign` in
+- [x] `Resource`: presence-tracking container; `Get`/`Set`/`Unassign` in
       standard attribute notation; `Clone`; automatic `schemas` array
       maintenance; `Meta` accessors; `null`/`[]`/absent equivalence
 - [x] Value system: SCIM-typed scalars (`dateTime`, `binary`, `reference`
