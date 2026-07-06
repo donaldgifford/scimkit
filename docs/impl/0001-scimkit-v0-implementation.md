@@ -187,7 +187,7 @@ type, and the hand-written typed views.
       `MultiValue`, addresses, x509, groups read-only), `Group` (§4.2),
       `EnterpriseUser` + `Manager` (§4.3, attached via `User.Enterprise`);
       `ListResponse`, `Meta`, common message types
-- [ ] Tests: presence-semantics table; codec round-trip properties
+- [x] Tests: presence-semantics table; codec round-trip properties
       (`User` → `Resource` → JSON → `Resource` → `User`; schema → wire →
       schema); fuzz target + seed corpus for the codec; example tests for
       the primary flows
