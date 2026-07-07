@@ -372,9 +372,17 @@ capability fallbacks, query engine, projection, ETags, discovery.
       `/ServiceProviderConfig` (spec SHOULD)
 - [ ] Store wiring: capability sniffing (`Patcher`, `SupportsFilter`) with
       startup `slog` capability report per resource type
-- [ ] `server/memstore`: case-folded value indexes, native filter
+- [x] `server/memstore`: case-folded value indexes, native filter
       evaluation via `filter.Match`, `Patcher` with set-semantics members,
       CAS on version — the reference implementation and mock backend
+      _(go-architect decisions: Store contract documents Replace's
+      conditional-write convention — incoming meta.version is the CAS
+      token, the store bumps on success — and the native Patcher owns
+      its own version/lastModified bump so the design's two-value
+      Patch signature stands; uniqueness-constrained attributes are
+      auto-indexed and enforced with ErrUniqueness; the index narrows
+      candidates but filter.Match always confirms; SortResources is
+      exported so native stores share the §3.4.2.3 comparator)_
 - [ ] Create/PUT pipeline: schema validation (required, canonicalValues
       per strictness), §3.5.1 PUT semantics (readOnly retained, immutable
       match-or-`ErrMutability`), uniqueness delegation (`ErrUniqueness` →
