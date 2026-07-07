@@ -229,7 +229,7 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       IdP shapes — each lenient acceptance covered by a test naming its
       source (v0 accepts exactly bare `not`; further shapes require a
       captured IdP request per the corpus discipline)
-- [ ] `Match` evaluator: schema-resolved `caseExact` string comparison,
+- [x] `Match` evaluator: schema-resolved `caseExact` string comparison,
       chronological `dateTime`, numeric compare, existential multi-valued
       matching, **per-element** valuePath correlation, `pr` on complex
       attributes, ordering ops on boolean/binary → `ErrInvalidFilter`,
