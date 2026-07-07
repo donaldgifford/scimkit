@@ -66,10 +66,12 @@ func (a *applier) resolveOpTarget(op *Op, index int) (attr, sub *scim.Attribute,
 }
 
 // checkMutable enforces mutability for a pathed op: readOnly targets
-// are never writable, immutable targets only while unassigned, and a
+// are never writable, immutable targets only while unassigned (or with
+// their current value — RFC 7643 §2.2 match-or-error), and a
 // whole-attribute remove of a required attribute is invalid. Resource.Set
 // deliberately skips these rules, so the PATCH pipeline is where they
-// bind.
+// bind. Immutable sub-attributes behind a value filter are enforced per
+// matched element at the write sites, where the element is known.
 func (a *applier) checkMutable(op *Op, attr, sub *scim.Attribute, index int) error {
 	if attr.Mutability == scim.MutabilityReadOnly {
 		return scim.ErrMutability(opLabel(index) + ": attribute " + attr.Name + " is readOnly")
@@ -83,10 +85,81 @@ func (a *applier) checkMutable(op *Op, attr, sub *scim.Attribute, index int) err
 				opLabel(index) + ": attribute " + attr.Name + " is immutable and already assigned")
 		}
 	}
+	if err := a.checkImmutableSubPath(op, sub, index); err != nil {
+		return err
+	}
 	if op.Kind == KindRemove && attr.Required && sub == nil && op.Path.ValueFilter == nil {
 		return scim.ErrMutability(opLabel(index) + ": cannot remove required attribute " + attr.Name)
 	}
 	return nil
+}
+
+// checkImmutableSubPath guards a dotted path naming an immutable
+// sub-attribute without a value filter (manager.value style): once
+// assigned, remove is a modification and a write may only carry the
+// current value.
+func (a *applier) checkImmutableSubPath(op *Op, sub *scim.Attribute, index int) error {
+	if sub == nil || sub.Mutability != scim.MutabilityImmutable || op.Path.ValueFilter != nil {
+		return nil
+	}
+	existing, assigned := a.res.Get(subPathText(op.Path))
+	if !assigned {
+		return nil
+	}
+	if op.Kind == KindRemove {
+		return errImmutableSub(sub, index)
+	}
+	coerced, err := a.coerce(subPathText(op.Path), op.Value)
+	if err != nil {
+		return err
+	}
+	if !valuesEqual(existing, coerced) {
+		return errImmutableSub(sub, index)
+	}
+	return nil
+}
+
+// checkElemImmutable rejects writing a different value to an immutable
+// sub-attribute already assigned on one element; re-sending the
+// identical value stays a legal no-op.
+func (a *applier) checkElemImmutable(op *Op, sub *scim.Attribute, elem scim.ComplexValue, raw any, index int) error {
+	if sub.Mutability != scim.MutabilityImmutable {
+		return nil
+	}
+	existing, assigned := elem[scim.FoldName(sub.Name)]
+	if !assigned || existing == nil {
+		return nil
+	}
+	coerced, err := a.coerceElemSub(op.Path, sub, raw)
+	if err != nil {
+		return err
+	}
+	if !valuesEqual(existing, coerced) {
+		return errImmutableSub(sub, index)
+	}
+	return nil
+}
+
+func errImmutableSub(sub *scim.Attribute, index int) *scim.Error {
+	return scim.ErrMutability(
+		opLabel(index) + ": sub-attribute " + sub.Name + " is immutable and already assigned")
+}
+
+// coerceElemSub coerces one sub-attribute value to its stored form
+// through a scratch element of the attribute at p.
+func (a *applier) coerceElemSub(p *filter.Path, sub *scim.Attribute, raw any) (any, error) {
+	scratch := scim.NewResource(a.rt)
+	key := scim.FoldName(sub.Name)
+	elem := scim.ComplexValue{key: raw}
+	if err := scratch.Set(attrPathText(p), scim.MultiComplexValue{elem}); err != nil {
+		return nil, err
+	}
+	v, _ := scratch.Get(attrPathText(p))
+	mcv, ok := v.(scim.MultiComplexValue)
+	if !ok || len(mcv) == 0 {
+		return nil, nil //nolint:nilnil // nil value with nil error means the raw value canonicalizes to unassigned (RFC 7643 §2.5)
+	}
+	return mcv[0][key], nil
 }
 
 // setTracked writes through Resource.Set and folds before/after change
@@ -197,10 +270,7 @@ func demoteOthers(list []scim.ComplexValue, keep map[int]bool) {
 		if keep[i] || !primaryTrue(list[i]) {
 			continue
 		}
-		clone := make(scim.ComplexValue, len(list[i]))
-		for k, v := range list[i] {
-			clone[k] = v
-		}
+		clone := cloneElement(list[i])
 		clone[attrPrimary] = false
 		list[i] = clone
 	}

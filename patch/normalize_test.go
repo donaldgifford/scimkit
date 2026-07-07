@@ -223,12 +223,12 @@ func TestRemoveValueAsSelector(t *testing.T) {
 		{
 			name:     "selector on filtered path rejected",
 			body:     patchBody(`[{"op": "remove", "path": "members[value eq \"a\"]", "value": [{"value": "b"}]}]`),
-			wantType: scim.ScimTypeInvalidValue,
+			wantType: scim.ScimTypeInvalidPath,
 		},
 		{
 			name:     "pathless remove with value rejected",
 			body:     patchBody(`[{"op": "remove", "value": [{"value": "a"}]}]`),
-			wantType: scim.ScimTypeInvalidValue,
+			wantType: scim.ScimTypeInvalidPath,
 		},
 		{
 			name:     "element with nested object member rejected",

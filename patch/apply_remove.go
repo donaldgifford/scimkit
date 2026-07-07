@@ -22,7 +22,7 @@ func (a *applier) applyRemove(op *Op, index int) error {
 		return err
 	}
 	if op.Path.ValueFilter != nil {
-		return a.removeValuePath(op, attr, sub)
+		return a.removeValuePath(op, attr, sub, index)
 	}
 	if sub != nil {
 		return a.setTracked(subPathText(op.Path), nil)
@@ -35,9 +35,10 @@ func (a *applier) applyRemove(op *Op, index int) error {
 // empty). Survivors go back through Set, whose empty-canonicalization
 // unassigns the attribute when the last element goes — the
 // presence-tracking model makes remove-last-element correct for free.
-func (a *applier) removeValuePath(op *Op, attr, sub *scim.Attribute) error {
+func (a *applier) removeValuePath(op *Op, attr, sub *scim.Attribute, index int) error {
 	if !attr.MultiValued || attr.Type != scim.TypeComplex {
-		return scim.ErrInvalidPath("value filter on non-multi-valued attribute " + attr.Name)
+		return scim.ErrInvalidPath(
+			opLabel(index) + ": value filter on non-multi-valued attribute " + attr.Name)
 	}
 	list, assigned := a.getList(op.Path)
 	if !assigned {
@@ -51,7 +52,11 @@ func (a *applier) removeValuePath(op *Op, attr, sub *scim.Attribute) error {
 		return nil
 	}
 	if sub != nil {
-		return a.removeSubFromElements(op, sub, list, matches)
+		return a.removeSubFromElements(op, sub, list, matches, index)
+	}
+	if attr.Required && len(matches) == len(list) {
+		return scim.ErrMutability(
+			opLabel(index) + ": cannot remove every value of required attribute " + attr.Name)
 	}
 	matched := make(map[int]bool, len(matches))
 	for _, i := range matches {
@@ -66,10 +71,18 @@ func (a *applier) removeValuePath(op *Op, attr, sub *scim.Attribute) error {
 	return a.setTracked(attrPathText(op.Path), survivors)
 }
 
-func (a *applier) removeSubFromElements(op *Op, sub *scim.Attribute, list scim.MultiComplexValue, matches []int) error {
+// removeSubFromElements unassigns one sub-attribute on the matched
+// elements. An immutable sub already assigned cannot be removed —
+// unassigning is a modification of a set immutable value.
+func (a *applier) removeSubFromElements(op *Op, sub *scim.Attribute, list scim.MultiComplexValue, matches []int, index int) error {
 	out := slices.Clone(list)
 	key := scim.FoldName(sub.Name)
 	for _, i := range matches {
+		if sub.Mutability == scim.MutabilityImmutable {
+			if v, ok := out[i][key]; ok && v != nil {
+				return errImmutableSub(sub, index)
+			}
+		}
 		elem := cloneElement(out[i])
 		delete(elem, key)
 		out[i] = elem

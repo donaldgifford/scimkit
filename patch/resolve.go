@@ -41,6 +41,11 @@ func namespaceAttrs(rt *scim.ResourceType, urn string) ([]scim.Attribute, bool) 
 	if urn == "" || scim.FoldName(urn) == scim.FoldName(rt.Schema.ID) {
 		return rt.Schema.Attributes, true
 	}
+	return extensionAttrs(rt, urn)
+}
+
+// extensionAttrs resolves a URN to a declared extension's attributes.
+func extensionAttrs(rt *scim.ResourceType, urn string) ([]scim.Attribute, bool) {
 	folded := scim.FoldName(urn)
 	for i := range rt.Extensions {
 		if scim.FoldName(rt.Extensions[i].Schema.ID) == folded {
@@ -51,11 +56,5 @@ func namespaceAttrs(rt *scim.ResourceType, urn string) ([]scim.Attribute, bool) 
 }
 
 func findAttr(attrs []scim.Attribute, name string) *scim.Attribute {
-	folded := scim.FoldName(name)
-	for i := range attrs {
-		if scim.FoldName(attrs[i].Name) == folded {
-			return &attrs[i]
-		}
-	}
-	return nil
+	return scim.FindAttribute(attrs, name)
 }

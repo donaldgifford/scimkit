@@ -130,6 +130,108 @@ func TestApplyOktaMemberRemoval(t *testing.T) {
 	assert.Equal(t, "b", list[0]["value"])
 }
 
+// TestApplyImmutableElementSubs pins immutable enforcement inside
+// matched valuePath elements against the real Group schema, whose
+// members.value/$ref/type are the only immutable attributes RFC 7643
+// ships: a member's identity must not be silently retargeted through
+// any write shape, while re-sending the identical value stays legal.
+func TestApplyImmutableElementSubs(t *testing.T) {
+	seedGroup := func(t *testing.T) *scim.Resource {
+		t.Helper()
+		rt := scim.GroupResourceType()
+		res := scim.NewResource(&rt)
+		require.NoError(t, res.Set("displayName", "Tour Guides"))
+		require.NoError(t, res.Set("members", []any{
+			map[string]any{"value": "u1", "$ref": "https://example.com/v2/Users/u1"},
+		}))
+		return res
+	}
+	tests := []struct {
+		name     string
+		op       string
+		wantType string
+	}{
+		{
+			name:     "sub-attribute replace retargeting identity",
+			op:       `{"op": "replace", "path": "members[value eq \"u1\"].value", "value": "u2"}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "sub-attribute add retargeting identity",
+			op:       `{"op": "add", "path": "members[value eq \"u1\"].value", "value": "u2"}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "element merge retargeting identity",
+			op:       `{"op": "add", "path": "members[value eq \"u1\"]", "value": {"value": "u2"}}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "whole-element replace retargeting identity",
+			op:       `{"op": "replace", "path": "members[value eq \"u1\"]", "value": {"value": "u2"}}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "whole-element replace dropping assigned $ref",
+			op:       `{"op": "replace", "path": "members[value eq \"u1\"]", "value": {"value": "u1"}}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "removing the identity sub-attribute",
+			op:       `{"op": "remove", "path": "members[value eq \"u1\"].value"}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name: "identical value re-sent is a legal no-op",
+			op:   `{"op": "add", "path": "members[value eq \"u1\"]", "value": {"value": "u1"}}`,
+		},
+		{
+			name: "setting an unassigned immutable sub is legal",
+			op:   `{"op": "add", "path": "members[value eq \"u1\"].type", "value": "User"}`,
+		},
+		{
+			name: "removing the whole element is legal",
+			op:   `{"op": "remove", "path": "members[value eq \"u1\"]"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := seedGroup(t)
+			_, err := applyOne(t, res, Strict, `[`+tt.op+`]`)
+			if tt.wantType == "" {
+				require.NoError(t, err)
+				return
+			}
+			requireScimType(t, err, tt.wantType)
+		})
+	}
+}
+
+// TestApplyRequiredMultiValuedRemove pins the required guard for
+// valuePath removes: emptying a required multi-valued attribute through
+// a filter is a mutability error, removing part of it is legal.
+func TestApplyRequiredMultiValuedRemove(t *testing.T) {
+	rt := widgetType(t)
+	rt.Schema.Attributes = append(rt.Schema.Attributes, scim.Attribute{
+		Name: "owners", Type: scim.TypeComplex, MultiValued: true, Required: true,
+		SubAttributes: []scim.Attribute{{Name: "value", Type: scim.TypeString}},
+	})
+	res := scim.NewResource(&rt)
+	require.NoError(t, res.Set("owners", []any{
+		map[string]any{"value": "a"},
+		map[string]any{"value": "b"},
+	}))
+
+	result, err := applyOne(t, res, Strict,
+		`[{"op": "remove", "path": "owners[value eq \"a\"]"}]`)
+	require.NoError(t, err, "partial removal of a required multi-valued attribute is legal")
+	assert.True(t, result.Changed)
+
+	_, err = applyOne(t, res, Strict,
+		`[{"op": "remove", "path": "owners[value pr]"}]`)
+	requireScimType(t, err, scim.ScimTypeMutability)
+}
+
 // TestApplyImmutableMatrix consolidates the immutable rules across all
 // three kinds: writable while unassigned, locked once assigned.
 func TestApplyImmutableMatrix(t *testing.T) {

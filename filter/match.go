@@ -95,13 +95,7 @@ func (ev *evaluator) namespace(urn string) ([]scim.Attribute, bool) {
 }
 
 func findAttr(attrs []scim.Attribute, name string) *scim.Attribute {
-	folded := scim.FoldName(name)
-	for i := range attrs {
-		if scim.FoldName(attrs[i].Name) == folded {
-			return &attrs[i]
-		}
-	}
-	return nil
+	return scim.FindAttribute(attrs, name)
 }
 
 // fullPathText renders the Resource.Get path for a filter path, including

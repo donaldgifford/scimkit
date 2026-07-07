@@ -354,6 +354,14 @@ func coerceSlice[T any](a *Attribute, items []any) (any, error) {
 	return out, nil
 }
 
+// FindAttribute returns the attribute whose name folds equal to name, or
+// nil. The filter and patch packages resolve paths against ResourceType
+// metadata outside this package and need the same case-insensitive
+// lookup the codec uses.
+func FindAttribute(attrs []Attribute, name string) *Attribute {
+	return findAttribute(attrs, name)
+}
+
 // findAttribute returns the attribute whose name folds equal to name, or
 // nil. It is the single lookup used for case-insensitive resolution.
 func findAttribute(attrs []Attribute, name string) *Attribute {

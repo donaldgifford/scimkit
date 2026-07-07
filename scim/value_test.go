@@ -378,3 +378,33 @@ func TestMultiComplexValueIndexFunc(t *testing.T) {
 		})
 	}
 }
+
+// TestFindAttribute pins the exported case-insensitive lookup the
+// filter and patch packages resolve paths with.
+func TestFindAttribute(t *testing.T) {
+	attrs := []Attribute{
+		{Name: "userName", Type: TypeString},
+		{Name: "name", Type: TypeComplex},
+	}
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "exact casing", query: "userName", want: "userName"},
+		{name: "folded casing", query: "USERNAME", want: "userName"},
+		{name: "second attribute", query: "Name", want: "name"},
+		{name: "no match", query: "missing", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FindAttribute(attrs, tt.query)
+			if tt.want == "" {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want, got.Name)
+		})
+	}
+}

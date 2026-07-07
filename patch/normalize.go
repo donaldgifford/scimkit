@@ -90,7 +90,7 @@ func rewriteRemoveSelectors(ops []Op) ([]Op, error) {
 			continue
 		}
 		if op.Path == nil || op.Path.ValueFilter != nil || op.Path.SubAttr != "" {
-			return nil, scim.ErrInvalidValue(
+			return nil, scim.ErrInvalidPath(
 				opLabel(i) + ": remove value selector requires a bare attribute path")
 		}
 		elems, ok := op.Value.([]any)
@@ -273,16 +273,6 @@ func coercePathless(rt *scim.ResourceType, obj map[string]any) {
 		}
 		obj[k] = coerceForAttr(attr, v)
 	}
-}
-
-func extensionAttrs(rt *scim.ResourceType, urn string) ([]scim.Attribute, bool) {
-	folded := scim.FoldName(urn)
-	for i := range rt.Extensions {
-		if scim.FoldName(rt.Extensions[i].Schema.ID) == folded {
-			return rt.Extensions[i].Schema.Attributes, true
-		}
-	}
-	return nil, false
 }
 
 // coerceForAttr coerces a value against one attribute: complex values

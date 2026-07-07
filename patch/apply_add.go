@@ -125,20 +125,25 @@ func (a *applier) addValuePath(op *Op, attr, sub *scim.Attribute, index int) err
 		}
 		return scim.ErrNoTarget(opLabel(index) + ": no value matches the filter on " + attr.Name)
 	}
-	return a.writeToElements(op, sub, list, matches)
+	return a.writeToElements(op, attr, sub, list, matches, index)
 }
 
 // writeToElements applies an op's value to the selected elements of a
 // stored list — the shared tail of valuePath add and replace: sub-attr
 // targets set that sub per element, whole-element targets merge the
-// value object in, and a newly set primary demotes the others.
-func (a *applier) writeToElements(op *Op, sub *scim.Attribute, list scim.MultiComplexValue, matches []int) error {
+// value object in, and a newly set primary demotes the others. An
+// immutable sub-attribute already assigned on an element accepts only
+// its current value; readOnly keys inside a merge object are skipped
+// like the pathless merge skips readOnly attributes.
+func (a *applier) writeToElements(
+	op *Op, attr, sub *scim.Attribute, list scim.MultiComplexValue, matches []int, index int,
+) error {
 	var mp map[string]any
 	if sub == nil {
 		var ok bool
 		mp, ok = op.Value.(map[string]any)
 		if !ok {
-			return scim.ErrInvalidValue("value for complex element must be an object")
+			return scim.ErrInvalidValue(opLabel(index) + ": value for complex element must be an object")
 		}
 	}
 	out := slices.Clone(list)
@@ -146,17 +151,36 @@ func (a *applier) writeToElements(op *Op, sub *scim.Attribute, list scim.MultiCo
 	for _, i := range matches {
 		elem := cloneElement(out[i])
 		if sub != nil {
-			elem[scim.FoldName(sub.Name)] = op.Value
-		} else {
-			for k, v := range mp {
-				elem[scim.FoldName(k)] = v
+			if err := a.checkElemImmutable(op, sub, elem, op.Value, index); err != nil {
+				return err
 			}
+			elem[scim.FoldName(sub.Name)] = op.Value
+		} else if err := a.mergeElemKeys(op, attr, elem, mp, index); err != nil {
+			return err
 		}
 		out[i] = elem
 		keep[i] = true
 	}
 	demoteOthers(out, keep)
 	return a.setTracked(attrPathText(op.Path), out)
+}
+
+// mergeElemKeys merges a value object into one existing element with
+// per-key mutability checks.
+func (a *applier) mergeElemKeys(op *Op, attr *scim.Attribute, elem scim.ComplexValue, mp map[string]any, index int) error {
+	for k, v := range mp {
+		subAttr := findAttr(attr.SubAttributes, k)
+		if subAttr != nil {
+			if subAttr.Mutability == scim.MutabilityReadOnly {
+				continue
+			}
+			if err := a.checkElemImmutable(op, subAttr, elem, v, index); err != nil {
+				return err
+			}
+		}
+		elem[scim.FoldName(k)] = v
+	}
+	return nil
 }
 
 // addPathless merges a resource-shaped value object per §3.5.2.1: each

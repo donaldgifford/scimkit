@@ -69,7 +69,7 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 		return scim.ErrNoTarget(opLabel(index) + ": no value matches the filter on " + attr.Name)
 	}
 	if sub != nil {
-		return a.writeToElements(op, sub, list, matches)
+		return a.writeToElements(op, attr, sub, list, matches, index)
 	}
 	mp, ok := op.Value.(map[string]any)
 	if !ok {
@@ -78,6 +78,9 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 	out := slices.Clone(list)
 	keep := make(map[int]bool, len(matches))
 	for _, i := range matches {
+		if err := a.checkReplacedElement(op, attr, out[i], mp, index); err != nil {
+			return err
+		}
 		elem := make(scim.ComplexValue, len(mp))
 		for k, v := range mp {
 			elem[scim.FoldName(k)] = v
@@ -87,4 +90,45 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 	}
 	demoteOthers(out, keep)
 	return a.setTracked(attrPathText(op.Path), out)
+}
+
+// checkReplacedElement verifies a whole-element replacement keeps every
+// assigned immutable sub-attribute of the old element at its current
+// value — changing or dropping one is a modification of a set immutable
+// value (RFC 7643 §2.2). Removing or adding whole elements stays legal;
+// this binds only when an existing element is substituted in place.
+func (a *applier) checkReplacedElement(op *Op, attr *scim.Attribute, old scim.ComplexValue, mp map[string]any, index int) error {
+	for si := range attr.SubAttributes {
+		sub := &attr.SubAttributes[si]
+		if sub.Mutability != scim.MutabilityImmutable {
+			continue
+		}
+		key := scim.FoldName(sub.Name)
+		existing, assigned := old[key]
+		if !assigned || existing == nil {
+			continue
+		}
+		raw, present := lookupFolded(mp, key)
+		if !present {
+			return errImmutableSub(sub, index)
+		}
+		coerced, err := a.coerceElemSub(op.Path, sub, raw)
+		if err != nil {
+			return err
+		}
+		if !valuesEqual(existing, coerced) {
+			return errImmutableSub(sub, index)
+		}
+	}
+	return nil
+}
+
+// lookupFolded finds a decoded object's member by folded key.
+func lookupFolded(mp map[string]any, foldedKey string) (any, bool) {
+	for k, v := range mp {
+		if scim.FoldName(k) == foldedKey {
+			return v, true
+		}
+	}
+	return nil, false
 }
