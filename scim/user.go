@@ -2,6 +2,7 @@ package scim
 
 import (
 	"fmt"
+	"slices"
 )
 
 // MultiValue is the standard multi-valued element shape (RFC 7643 §2.4)
@@ -362,7 +363,9 @@ func certificatesAt(r *Resource) []Certificate {
 	for i, cv := range mcv {
 		var der []byte
 		if b, ok := cv["value"].([]byte); ok {
-			der = b
+			// Clone so mutating the typed view cannot corrupt the source
+			// resource.
+			der = slices.Clone(b)
 		}
 		out[i] = Certificate{
 			Value:   der,

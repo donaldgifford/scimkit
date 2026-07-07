@@ -156,6 +156,36 @@ func TestUserResourceMapping(t *testing.T) {
 	}
 }
 
+// TestCertificateBytesAreIndependent pins that mutating a typed view's
+// certificate bytes cannot corrupt the source resource, and vice versa.
+func TestCertificateBytesAreIndependent(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{name: "typed view mutation does not reach the resource"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			user := &User{X509Certificates: []Certificate{{Value: []byte{1, 2, 3}}}}
+			res, err := user.Resource()
+			require.NoError(t, err)
+
+			view, err := UserFromResource(res)
+			require.NoError(t, err)
+			view.X509Certificates[0].Value[0] = 99
+
+			stored, ok := res.Get("x509Certificates")
+			require.True(t, ok)
+			assert.Equal(t, []byte{1, 2, 3}, stored.(MultiComplexValue)[0]["value"])
+
+			user.X509Certificates[0].Value[0] = 42
+			stored, ok = res.Get("x509Certificates")
+			require.True(t, ok)
+			assert.Equal(t, []byte{1, 2, 3}, stored.(MultiComplexValue)[0]["value"])
+		})
+	}
+}
+
 func TestUserResourceErrors(t *testing.T) {
 	tests := []struct {
 		name string

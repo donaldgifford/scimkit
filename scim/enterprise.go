@@ -26,12 +26,12 @@ func (e *EnterpriseUser) containerValue() any {
 	if e == nil {
 		return nil
 	}
-	container := make(map[string]any)
-	putContainerString(container, "employeenumber", e.EmployeeNumber)
-	putContainerString(container, "costcenter", e.CostCenter)
-	putContainerString(container, "organization", e.Organization)
-	putContainerString(container, "division", e.Division)
-	putContainerString(container, "department", e.Department)
+	container := make(ComplexValue)
+	putString(container, "employeenumber", e.EmployeeNumber)
+	putString(container, "costcenter", e.CostCenter)
+	putString(container, "organization", e.Organization)
+	putString(container, "division", e.Division)
+	putString(container, "department", e.Department)
 	if e.Manager != nil {
 		cv := make(ComplexValue)
 		putString(cv, "value", e.Manager.Value)
@@ -44,13 +44,7 @@ func (e *EnterpriseUser) containerValue() any {
 	if len(container) == 0 {
 		return nil
 	}
-	return container
-}
-
-func putContainerString(container map[string]any, foldedKey, s string) {
-	if s != "" {
-		container[foldedKey] = s
-	}
+	return map[string]any(container)
 }
 
 // enterpriseFromResource projects the enterprise extension container into

@@ -302,6 +302,46 @@ func TestCoerceMultiScalarTypes(t *testing.T) {
 	}
 }
 
+// TestBinaryValuesAreCopiedAtBoundaries pins the ownership rule: byte
+// slices are cloned on the way in, so callers mutating their original
+// slices cannot corrupt stored resource state.
+func TestBinaryValuesAreCopiedAtBoundaries(t *testing.T) {
+	tests := []struct {
+		name string
+		attr *Attribute
+		in   func() (input any, mutate func())
+		read func(stored any) []byte
+	}{
+		{
+			name: "single binary",
+			attr: scalarAttr("x", TypeBinary),
+			in: func() (any, func()) {
+				b := []byte("hello")
+				return b, func() { b[0] = 'X' }
+			},
+			read: func(stored any) []byte { return stored.([]byte) },
+		},
+		{
+			name: "multi-valued binary",
+			attr: &Attribute{Name: "xs", Type: TypeBinary, MultiValued: true},
+			in: func() (any, func()) {
+				b := []byte("hello")
+				return []any{b}, func() { b[0] = 'X' }
+			},
+			read: func(stored any) []byte { return stored.([][]byte)[0] },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input, mutate := tt.in()
+			stored, err := coerceValue(tt.attr, input)
+			require.NoError(t, err)
+			mutate()
+			assert.Equal(t, []byte("hello"), tt.read(stored))
+		})
+	}
+}
+
 func TestMultiComplexValueIndexFunc(t *testing.T) {
 	emails := MultiComplexValue{
 		{"value": "a@example.com"},

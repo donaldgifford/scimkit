@@ -139,15 +139,15 @@ func decodeMeta(r *Resource, v any) error {
 func decodeMetaField(m *Meta, folded string, v any) error {
 	var err error
 	switch folded {
-	case "resourcetype":
+	case metaResourceType:
 		m.ResourceType, err = metaString(folded, v)
-	case "created":
+	case metaCreated:
 		m.Created, err = metaTime(folded, v)
-	case "lastmodified":
+	case metaLastModified:
 		m.LastModified, err = metaTime(folded, v)
-	case "location":
+	case metaLocation:
 		m.Location, err = metaString(folded, v)
-	case "version":
+	case metaVersion:
 		m.Version, err = metaString(folded, v)
 	}
 	return err

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -169,7 +170,9 @@ func coerceDateTime(v any) (any, error) {
 func coerceBinary(v any) (any, error) {
 	switch b := v.(type) {
 	case []byte:
-		return b, nil
+		// Clone so later mutation of the caller's slice cannot corrupt
+		// stored resource state.
+		return slices.Clone(b), nil
 	case string:
 		raw, err := base64.StdEncoding.DecodeString(b)
 		if err != nil {

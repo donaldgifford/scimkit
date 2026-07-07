@@ -53,7 +53,7 @@ func (lr *ListResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return ErrInvalidSyntax(fmt.Sprintf("parse list response: %v", err))
 	}
-	out := ListResponse{}
+	var out ListResponse
 	for key, rv := range raw {
 		var err error
 		switch foldName(key) {

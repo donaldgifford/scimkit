@@ -13,6 +13,16 @@ const (
 	attrMeta    = "meta"
 )
 
+// Folded meta sub-attribute names, shared by the Meta projection here and
+// the codec's meta decoding so the two cannot drift.
+const (
+	metaResourceType = "resourcetype"
+	metaCreated      = "created"
+	metaLastModified = "lastmodified"
+	metaLocation     = "location"
+	metaVersion      = "version"
+)
+
 // Meta is the resource metadata complex attribute (RFC 7643 §3.1). Zero
 // fields are unassigned.
 type Meta struct {
@@ -151,19 +161,19 @@ func subValue(v any, sub *Attribute) (any, bool) {
 func (r *Resource) metaValue() ComplexValue {
 	cv := make(ComplexValue)
 	if r.meta.ResourceType != "" {
-		cv["resourcetype"] = r.meta.ResourceType
+		cv[metaResourceType] = r.meta.ResourceType
 	}
 	if !r.meta.Created.IsZero() {
-		cv["created"] = r.meta.Created
+		cv[metaCreated] = r.meta.Created
 	}
 	if !r.meta.LastModified.IsZero() {
-		cv["lastmodified"] = r.meta.LastModified
+		cv[metaLastModified] = r.meta.LastModified
 	}
 	if r.meta.Location != "" {
-		cv["location"] = r.meta.Location
+		cv[metaLocation] = r.meta.Location
 	}
 	if r.meta.Version != "" {
-		cv["version"] = r.meta.Version
+		cv[metaVersion] = r.meta.Version
 	}
 	if len(cv) == 0 {
 		return nil
@@ -217,12 +227,19 @@ func (r *Resource) setExtension(rp resolvedPath, path string, v any) error {
 	if err := setInContainer(container, rp, path, v); err != nil {
 		return err
 	}
+	r.commitExtension(key, container)
+	return nil
+}
+
+// commitExtension stores a non-empty extension container and deletes an
+// empty one, keeping the never-store-empty invariant (and thereby the
+// derived schemas list) intact.
+func (r *Resource) commitExtension(key string, container map[string]any) {
 	if len(container) == 0 {
 		delete(r.attrs, key)
-	} else {
-		r.attrs[key] = container
+		return
 	}
-	return nil
+	r.attrs[key] = container
 }
 
 // setExtensionContainer replaces a whole extension container from a map
@@ -251,11 +268,7 @@ func (r *Resource) setExtensionContainer(rp resolvedPath, path, key string, v an
 			container[foldName(attr.Name)] = cv
 		}
 	}
-	if len(container) == 0 {
-		delete(r.attrs, key)
-	} else {
-		r.attrs[key] = container
-	}
+	r.commitExtension(key, container)
 	return nil
 }
 
