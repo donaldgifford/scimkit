@@ -39,12 +39,15 @@ func applyWidget(t *testing.T) *scim.Resource {
 	return res
 }
 
-// applyOne decodes a single-op PatchOp body and applies it under the
+// applyOne decodes a PatchOp operations array and applies it under the
 // profile, so tests exercise the same path production traffic takes.
+// Decode errors propagate, letting error tables assert either stage.
 func applyOne(t *testing.T, res *scim.Resource, p Profile, body string) (Result, error) {
 	t.Helper()
 	ops, err := Decode([]byte(patchBody(body)), res.ResourceType(), p)
-	require.NoError(t, err)
+	if err != nil {
+		return Result{}, err
+	}
 	return Apply(res, ops, p)
 }
 

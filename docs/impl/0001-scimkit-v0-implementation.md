@@ -326,11 +326,21 @@ simulator input later.
       Resource.Set and schemas derives from extension containers; the
       group-member no-op success criterion is pinned end to end under
       the Okta profile)_
-- [ ] Golden IdP corpus: `testdata/idp/{entra,okta,onelogin}/*.json`
+- [x] Golden IdP corpus: `testdata/idp/{entra,okta,onelogin}/*.json`
       authored from documented shapes, each fixture carrying a `_source`
       URL field; shared loader package for tests and (later) the simulator
-- [ ] Conformance test file mirroring §3.5.2's structure; fuzz `Decode`
+      _(location deviation: fixtures live at
+      `internal/idpcorpus/testdata/idp/` — go:embed cannot escape the
+      declaring package's directory, and the phase-6 simulator ships in
+      a distroless container needing the corpus compiled in; fixtures
+      assert per-profile cases including the Strict rejection with the
+      RFC-correct scimType)_
+- [x] Conformance test file mirroring §3.5.2's structure; fuzz `Decode`
       with corpus seeds
+      _(FuzzDecode runs every corpus request plus hostile seeds under
+      Strict/Default/Entra against User and Group types: 60s clean,
+      ~2.6M execs; invariants — no panics, all errors *scim.Error,
+      decoded ops structurally valid)_
 
 #### Success criteria (phase 3)
 

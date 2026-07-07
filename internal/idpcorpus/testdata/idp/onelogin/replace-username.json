@@ -1,0 +1,35 @@
+{
+  "_source": "https://developers.onelogin.com/scim/define-scim-schema",
+  "description": "OneLogin updates profile attributes with conventional pathed replace operations — compliant traffic that passes every profile including strict.",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "replace",
+        "path": "userName",
+        "value": "barbara.jensen@example.com"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "default",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com"
+      },
+      "wantChanged": true,
+      "want": [{ "path": "userName", "value": "barbara.jensen@example.com" }]
+    },
+    {
+      "profile": "strict",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com"
+      },
+      "wantChanged": true,
+      "want": [{ "path": "userName", "value": "barbara.jensen@example.com" }]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "_source": "https://developers.onelogin.com/scim/define-scim-schema",
+  "description": "OneLogin removes multi-valued elements with an RFC-shaped valuePath filter in the path — the compliant counterpart to Okta's op-level value selector.",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "remove",
+        "path": "emails[type eq \"home\"]"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "default",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com",
+        "emails": [
+          { "value": "bjensen@example.com", "type": "work" },
+          { "value": "babs@home.example.com", "type": "home" }
+        ]
+      },
+      "wantChanged": true,
+      "want": [{ "path": "emails", "len": 1 }]
+    },
+    {
+      "profile": "strict",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com",
+        "emails": [
+          { "value": "bjensen@example.com", "type": "work" },
+          { "value": "babs@home.example.com", "type": "home" }
+        ]
+      },
+      "wantChanged": true,
+      "want": [{ "path": "emails", "len": 1 }]
+    }
+  ]
+}

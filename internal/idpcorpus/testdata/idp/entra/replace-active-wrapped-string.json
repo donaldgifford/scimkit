@@ -1,0 +1,31 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/entra/identity/app-provisioning/use-scim-to-provision-users-and-groups",
+  "description": "Entra ID soft-deletes with a title-cased Replace op whose value is a one-element array wrapping the boolean as a string: [{\"$ref\": null, \"value\": \"False\"}].",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "Replace",
+        "path": "active",
+        "value": [{ "$ref": null, "value": "False" }]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "entra",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com",
+        "active": true
+      },
+      "wantChanged": true,
+      "want": [{ "path": "active", "value": false }]
+    },
+    {
+      "profile": "strict",
+      "decodeError": "invalidSyntax"
+    }
+  ]
+}

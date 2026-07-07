@@ -1,0 +1,36 @@
+{
+  "_source": "https://developer.okta.com/docs/reference/scim/scim-20/#update-a-specific-user-patch",
+  "description": "Okta deactivates users with a pathless replace whose value object uses plain attribute keys — RFC-legal shape that must behave identically under every profile.",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "replace",
+        "value": { "active": false }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "okta",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com",
+        "active": true
+      },
+      "wantChanged": true,
+      "want": [{ "path": "active", "value": false }]
+    },
+    {
+      "profile": "strict",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com",
+        "active": true
+      },
+      "wantChanged": true,
+      "want": [{ "path": "active", "value": false }]
+    }
+  ]
+}

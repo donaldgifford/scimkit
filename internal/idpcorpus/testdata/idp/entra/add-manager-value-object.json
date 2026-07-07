@@ -1,0 +1,45 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/entra/identity/app-provisioning/use-scim-to-provision-users-and-groups",
+  "description": "Entra ID sets the enterprise manager reference by adding an object with a value sub-attribute at the extension manager path — schema-shaped traffic that must also pass strict.",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "add",
+        "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager",
+        "value": { "value": "26118915-6090-4610-87e4-49d8ca9f808d" }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "entra",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com"
+      },
+      "wantChanged": true,
+      "want": [
+        {
+          "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.value",
+          "value": "26118915-6090-4610-87e4-49d8ca9f808d"
+        }
+      ]
+    },
+    {
+      "profile": "strict",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com"
+      },
+      "wantChanged": true,
+      "want": [
+        {
+          "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.value",
+          "value": "26118915-6090-4610-87e4-49d8ca9f808d"
+        }
+      ]
+    }
+  ]
+}

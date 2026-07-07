@@ -1,0 +1,34 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/entra/identity/app-provisioning/use-scim-to-provision-users-and-groups",
+  "description": "Entra ID adds sub-attributes through valuePath filters for elements that do not exist yet (addresses[type eq \"work\"].locality on a user with no addresses) and expects the element to be created; strict RFC 7644 §3.5.2.3 is 400 noTarget.",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "add",
+        "path": "addresses[type eq \"work\"].locality",
+        "value": "Hollywood"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "entra",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com"
+      },
+      "wantChanged": true,
+      "want": [{ "path": "addresses", "len": 1 }]
+    },
+    {
+      "profile": "strict",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com"
+      },
+      "applyError": "noTarget"
+    }
+  ]
+}
