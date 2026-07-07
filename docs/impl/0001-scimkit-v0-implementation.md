@@ -239,7 +239,7 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       — noted deviation: the AST structs are `AndExpr`/`OrExpr`/`NotExpr`
       so the builder functions can own the `And`/`Or`/`Not` names the
       design's usage example shows (Go allows one meaning per identifier)
-- [ ] Property tests: builder → `String()` → `Parse` → equal AST;
+- [x] Property tests: builder → `String()` → `Parse` → equal AST;
       `Parse` → `String()` → `Parse` stable
 - [ ] Conformance tests: RFC §3.4.2.2 Figure 2 examples parse to expected
       ASTs; Table 3 operator-semantics matrix; observed Okta/Entra filters

@@ -135,22 +135,39 @@ func (p Present) String() string {
 	return p.Path.String() + " pr"
 }
 
-// String parenthesizes OrExpr operands: and binds tighter than or, so emitting
-// "a or b and c" for AndExpr{OrExpr{a,b},c} would silently reparse as a different
-// tree.
+// String parenthesizes operands whose bare rendering would reparse to a
+// different tree: or under and (and binds tighter), and any same-operator
+// right child — the parser left-associates, so a right-nested
+// AndExpr{a, AndExpr{b, c}} rendered flat would come back left-nested.
 func (a AndExpr) String() string {
-	return andOperand(a.L) + " and " + andOperand(a.R)
+	return andLeft(a.L) + " and " + andRight(a.R)
 }
 
-func andOperand(e Expr) string {
+func andLeft(e Expr) string {
 	if _, ok := e.(OrExpr); ok {
 		return "(" + e.String() + ")"
 	}
 	return e.String()
 }
 
+func andRight(e Expr) string {
+	switch e.(type) {
+	case OrExpr, AndExpr:
+		return "(" + e.String() + ")"
+	default:
+		return e.String()
+	}
+}
+
 func (o OrExpr) String() string {
-	return o.L.String() + " or " + o.R.String()
+	return o.L.String() + " or " + orRight(o.R)
+}
+
+func orRight(e Expr) string {
+	if _, ok := e.(OrExpr); ok {
+		return "(" + e.String() + ")"
+	}
+	return e.String()
 }
 
 // String always renders the strict grammar form not (filter), regardless of
