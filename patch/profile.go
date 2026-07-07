@@ -45,3 +45,50 @@ type Profile struct {
 	// do not exist yet.
 	SynthesizeAddValuePath bool
 }
+
+// The built-in profiles. Strict is exact RFC 7644; Default accepts
+// shape deviations that carry unambiguous intent but never remaps RFC
+// error semantics; the IdP profiles layer documented per-vendor
+// deviations on top of Default.
+var (
+	// Strict is exact RFC 7644 §3.5.2 semantics: every knob off. Use it
+	// for conformance testing and for clients that must never mask a
+	// provider bug.
+	Strict Profile
+
+	// Default is Postel mode — tolerant input, strict output. It
+	// accepts the widely observed shape deviations (title-cased ops,
+	// string-encoded primitives with {"value": x} wrapping, flattened
+	// pathless-replace keys, remove-with-value member selectors)
+	// because each has exactly one possible meaning. It keeps the RFC's
+	// error semantics: a replace or add whose valuePath filter matches
+	// nothing still fails with noTarget.
+	Default = Profile{
+		CaseInsensitiveOps:     true,
+		CoerceStringPrimitives: true,
+		ExpandPathlessReplace:  true,
+		RemoveValueAsSelector:  true,
+	}
+
+	// Entra is Default plus Microsoft Entra ID's documented semantic
+	// deviations: Entra provisioning issues replace and add operations
+	// against valuePath targets that do not exist yet (for example
+	// addresses[type eq "work"].locality on a user with no addresses)
+	// and expects the element to be created, where strict RFC 7644
+	// §3.5.2.3 requires 400 noTarget.
+	Entra = Profile{
+		CaseInsensitiveOps:     true,
+		CoerceStringPrimitives: true,
+		ExpandPathlessReplace:  true,
+		RemoveValueAsSelector:  true,
+		ReplaceNoTargetAsAdd:   true,
+		SynthesizeAddValuePath: true,
+	}
+
+	// Okta matches Default: Okta's one grammar deviation — removing
+	// group members via an op-level value array instead of a valuePath
+	// filter — is already part of Default's shape tolerance. It exists
+	// as a distinct profile so deployments pin vendor intent and future
+	// Okta-specific deviations land without call-site changes.
+	Okta = Default
+)

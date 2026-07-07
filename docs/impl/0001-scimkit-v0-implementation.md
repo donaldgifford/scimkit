@@ -284,8 +284,13 @@ simulator input later.
       unwrap → string coercion, both schema-directed against rt;
       unwrapping only fires when the target resolves non-complex, so
       legitimate `{"value": ...}` sub-attributes survive)_
-- [ ] `Profile` definitions: `Strict`, `Default`, `Entra`, `Okta` — each
+- [x] `Profile` definitions: `Strict`, `Default`, `Entra`, `Okta` — each
       knob's doc comment cites the field report that motivates it
+      _(Default = shape tolerance only, never remaps RFC error
+      semantics; Entra = Default + ReplaceNoTargetAsAdd +
+      SynthesizeAddValuePath; Okta = Default — its one deviation,
+      remove-members-by-value, is already shape tolerance; knob sets
+      pinned by TestProfileDefinitions)_
 - [ ] `Apply` — add table: pathless merge, missing target creates, complex
       merge, multi-valued append, single-valued replace, **idempotent
       no-change add** (`Changed=false`)
