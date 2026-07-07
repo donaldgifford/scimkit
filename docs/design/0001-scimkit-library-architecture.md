@@ -370,7 +370,10 @@ Two stages, deliberately separated:
 //   - string booleans/numbers coerced per target attribute type ("False" → false)
 //   - pathless replace with flattened dotted keys and URN keys expanded
 //   - remove with op-level value array treated as a member selector
-//   - {"value": x} object unwrapping
+//   - {"value": x} object unwrapping (gated by CoerceStringPrimitives —
+//     the same Entra field report motivates both: Entra wraps simple
+//     add/replace values as {"value": "False"} objects, then needs the
+//     inner string coerced; unwrapping runs before coercion)
 func Decode(body []byte, rt *scim.ResourceType, p Profile) ([]Op, error)
 
 type Op struct {

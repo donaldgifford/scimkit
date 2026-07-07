@@ -266,8 +266,14 @@ simulator input later.
 
 #### Tasks (phase 3)
 
-- [ ] `PatchOp` message decoding: schema URN validation, `Operations`
+- [x] `PatchOp` message decoding: schema URN validation, `Operations`
       required, per-op shape checks → `ErrInvalidSyntax`/`ErrInvalidPath`
+      _(go-architect decisions: Kind string-backed lowercase like
+      filter.Op; Op.Value = decoded-any with json.Number preserved;
+      missing/null add-replace value and remove-with-value →
+      ErrInvalidValue; `{"value": x}` unwrapping is gated by
+      CoerceStringPrimitives — same Entra field report as string
+      coercion — recorded in the design doc)_
 - [ ] Normalization passes, one per `Profile` knob, each independently
       unit-tested: case-insensitive ops; string→bool/int/decimal coercion
       per target attribute; pathless-replace expansion (dotted keys +
