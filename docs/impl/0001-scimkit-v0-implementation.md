@@ -241,7 +241,7 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       design's usage example shows (Go allows one meaning per identifier)
 - [x] Property tests: builder → `String()` → `Parse` → equal AST;
       `Parse` → `String()` → `Parse` stable
-- [ ] Conformance tests: RFC §3.4.2.2 Figure 2 examples parse to expected
+- [x] Conformance tests: RFC §3.4.2.2 Figure 2 examples parse to expected
       ASTs; Table 3 operator-semantics matrix; observed Okta/Entra filters
       (`userName eq`, `externalId eq`, extension-URN paths)
 - [ ] Fuzz `Parse` + `ParsePath` with seed corpus (RFC examples + IdP
