@@ -24,6 +24,9 @@ func Decode(body []byte, rt *scim.ResourceType, p Profile) ([]Op, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.ExpandPathlessReplace {
+		raws = expandPathlessReplace(raws, p)
+	}
 	ops := make([]Op, 0, len(raws))
 	for i := range raws {
 		op, err := buildOp(&raws[i], i, p)
@@ -32,7 +35,16 @@ func Decode(body []byte, rt *scim.ResourceType, p Profile) ([]Op, error) {
 		}
 		ops = append(ops, op)
 	}
-	_ = rt // schema-directed normalization passes attach here
+	if p.RemoveValueAsSelector {
+		ops, err = rewriteRemoveSelectors(ops)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if p.CoerceStringPrimitives {
+		unwrapValueObjects(ops, rt)
+		coerceStringPrimitives(ops, rt)
+	}
 	return ops, nil
 }
 
@@ -186,9 +198,13 @@ func buildOp(ro *rawOp, index int, p Profile) (Op, error) {
 		// Removing selected members via an op-level value array is the
 		// RemoveValueAsSelector rewrite; without it a value on remove is
 		// rejected rather than silently removing more than the client
-		// selected.
+		// selected. Under the knob the value rides along for the rewrite
+		// pass, which always clears it.
 		if ro.hasValue {
-			return Op{}, scim.ErrInvalidValue(opLabel(index) + ": remove does not take a value")
+			if !p.RemoveValueAsSelector {
+				return Op{}, scim.ErrInvalidValue(opLabel(index) + ": remove does not take a value")
+			}
+			op.Value = ro.value
 		}
 	}
 	return op, nil

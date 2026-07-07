@@ -274,11 +274,16 @@ simulator input later.
       ErrInvalidValue; `{"value": x}` unwrapping is gated by
       CoerceStringPrimitives — same Entra field report as string
       coercion — recorded in the design doc)_
-- [ ] Normalization passes, one per `Profile` knob, each independently
+- [x] Normalization passes, one per `Profile` knob, each independently
       unit-tested: case-insensitive ops; string→bool/int/decimal coercion
       per target attribute; pathless-replace expansion (dotted keys +
       full-URN keys); remove-with-value-array as member selector;
       `{"value": x}` unwrapping
+      _(pass order: op-case folding inline at kind validation →
+      pathless-replace expansion pre-path-parse → selector rewrite →
+      unwrap → string coercion, both schema-directed against rt;
+      unwrapping only fires when the target resolves non-complex, so
+      legitimate `{"value": ...}` sub-attributes survive)_
 - [ ] `Profile` definitions: `Strict`, `Default`, `Entra`, `Okta` — each
       knob's doc comment cites the field report that motivates it
 - [ ] `Apply` — add table: pathless merge, missing target creates, complex
