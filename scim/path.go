@@ -48,6 +48,20 @@ var commonAttributes = []Attribute{
 	},
 }
 
+// CommonAttributes returns the RFC 7643 §3.1 common attributes (id,
+// externalId, meta, schemas) as fresh values on every call, mirroring the
+// generated schema accessors. Consumers that resolve paths outside this
+// package (filter evaluation, PATCH targeting) need their metadata —
+// meta.lastModified's dateTime type, id's caseExact — without restating
+// RFC facts.
+func CommonAttributes() []Attribute {
+	out := make([]Attribute, len(commonAttributes))
+	for i := range commonAttributes {
+		out[i] = commonAttributes[i].clone()
+	}
+	return out
+}
+
 // resolvedPath is the outcome of resolving standard attribute notation
 // (RFC 7644 §3.10) against a ResourceType. Attribute pointers reference the
 // ResourceType's schema (or commonAttributes) and must be treated as
