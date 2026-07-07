@@ -361,17 +361,34 @@ capability fallbacks, query engine, projection, ETags, discovery.
 
 #### Tasks (phase 4)
 
-- [ ] `Config` validation + `New` returning `http.Handler` on Go 1.22
+- [x] `Config` validation + `New` returning `http.Handler` on Go 1.22
       `ServeMux` patterns: per-type CRUD/PATCH/list, `POST /{type}/.search`
       (same query engine as GET), discovery endpoints, `501` for `/Bulk`
       and `/Me`, `403` for filtered discovery queries
-- [ ] Middleware: media-type handling (`application/scim+json`, accept
+      _(`config.go` validates BaseURL/ResourceTypes/MaxFilterResults,
+      defaults DefaultPageSize to 100 and Logger to slog.Default, and
+      rejects duplicate/non-single-segment endpoints; `router.go` wires
+      method patterns per `rt.Endpoint`, catch-all `/` → 404, `/Bulk`
+      and `/Me` → 501; `New(cfg Config)` keeps the by-value public
+      constructor signature from DESIGN-0001, nolint hugeParam)_
+- [x] Middleware: media-type handling (`application/scim+json`, accept
       `application/json`), panic-safe error mapping (`scim.Error` → wire
       body + status), request-scoped `slog` fields
-- [ ] `BearerToken(verifyFn)` helper + configurable auth exemption for
+      _(`middleware.go` chain recover → logging → auth → media-type;
+      `errors.go` maps `*scim.Error` via `errors.As`, anything else →
+      generic 500 so internals never reach the wire; empty-body
+      requests skip the media-type check)_
+- [x] `BearerToken(verifyFn)` helper + configurable auth exemption for
       `/ServiceProviderConfig` (spec SHOULD)
-- [ ] Store wiring: capability sniffing (`Patcher`, `SupportsFilter`) with
+      _(`auth.go` `Auth` interface = Wrap + Scheme; BearerToken parses
+      the scheme case-insensitively, 401 carries a WWW-Authenticate
+      challenge; `Config.ExemptServiceProviderConfig` splits routing so
+      GET /ServiceProviderConfig bypasses the auth wrap)_
+- [x] Store wiring: capability sniffing (`Patcher`, `SupportsFilter`) with
       startup `slog` capability report per resource type
+      _(`typehandler.go` type-asserts both optional interfaces once at
+      `newTypeHandler` and logs nativePatch/filterCapabilityReported per
+      type)_
 - [x] `server/memstore`: case-folded value indexes, native filter
       evaluation via `filter.Match`, `Patcher` with set-semantics members,
       CAS on version — the reference implementation and mock backend
@@ -383,35 +400,82 @@ capability fallbacks, query engine, projection, ETags, discovery.
       auto-indexed and enforced with ErrUniqueness; the index narrows
       candidates but filter.Match always confirms; SortResources is
       exported so native stores share the §3.4.2.3 comparator)_
-- [ ] Create/PUT pipeline: schema validation (required, canonicalValues
+- [x] Create/PUT pipeline: schema validation (required, canonicalValues
       per strictness), §3.5.1 PUT semantics (readOnly retained, immutable
       match-or-`ErrMutability`), uniqueness delegation (`ErrUniqueness` →
       409), id/meta assignment
-- [ ] PATCH endpoint: native `Patcher` path or Get → `patch.Apply` → CAS
+      _(`pipeline.go`: `validateResource` enforces required attrs +
+      required extensions always and canonicalValues only under the
+      strict profile (case-insensitive membership); `mergePut` retains
+      readOnly from current, immutable is match-or-`ErrMutability` and
+      an omitted immutable is retained; create stamps a new id + full
+      meta, PUT carries the current version as the store's CAS token)_
+- [x] PATCH endpoint: native `Patcher` path or Get → `patch.Apply` → CAS
       Replace fallback with bounded retry; always `200` + full body (the
       Okta-safe default); `Changed=false` skips version/lastModified bump
-- [ ] Query engine: filter push-down with scan-and-`Match` fallback capped
+      _(`handler_patch.go`: `patchNative` delegates to the Patcher and
+      checks If-Match best-effort; `patchFallback` runs under the stripe
+      lock with a 3-round CAS retry on `ErrPreconditionFailed`, checking
+      If-Match once against the first read; `!Changed` returns the
+      current resource untouched)_
+- [x] Query engine: filter push-down with scan-and-`Match` fallback capped
       by `MaxFilterResults` → `ErrTooMany`; sorting (primary-first value,
       missing-last ascending, type-aware compare, `caseExact`); pagination
       (`startIndex<1`→1, negative count→0, `count=0` returns totals only)
-- [ ] Projection stage on **all** responses (GET and write responses):
+      _(`engine.go` pushes the filter down when the store supports it,
+      else lists unfiltered capped at MaxFilterResults+1 → `ErrTooMany`,
+      matches with `filter.Match`, sorts with `SortResources`, and
+      paginates; `query.go` normalizes GET params and the /.search body
+      into one `Query`; whoever filters sorts, so ordering happens once)_
+- [x] Projection stage on **all** responses (GET and write responses):
       `attributes`/`excludedAttributes` mutual exclusion, minimum set
       (`id`, `schemas`, `returned=always`), `returned=never` strip
-- [ ] ETags: weak ETag from canonical-JSON hash unless store supplies
+      _(`typehandler.go` `requestProjection` + `query.go`
+      `parseProjection` reject combining the two lists with
+      `invalidValue`; the projection is applied by `scim.EncodeResource`
+      on every CRUD, PATCH, and list response — its §3.4.2.5 rules own
+      the minimum set and `returned` handling)_
+- [x] ETags: weak ETag from canonical-JSON hash unless store supplies
       `meta.version`; `If-Match` → 412 on mismatch; `If-None-Match` → 304;
       `meta.version` mirrors the header
-- [ ] Concurrency: striped per-resource-id locks around the
+      _(`etag.go`: `resourceETag` prefers store meta.version else a weak
+      SHA-256 tag of the canonical unprojected JSON; `stampETag` mirrors
+      it into meta.version before encoding; RFC 7232 weak comparison with
+      `*` support; `If-None-Match` handled on GET only → 304)_
+- [x] Concurrency: striped per-resource-id locks around the
       read-modify-write fallback
-- [ ] Discovery generation from wiring: SPC capability flags reflect
+      _(`locks.go`: 32 fnv32a stripes keyed on endpoint+"/"+id, held
+      around the PATCH fallback and the PUT read-modify-write only; the
+      native Patcher path owns its own store lock)_
+- [x] Discovery generation from wiring: SPC capability flags reflect
       actual config (patch/filter+maxResults/sort/etag true; bulk/
       changePassword false), `/ResourceTypes` + `/Schemas` from registered
       types, `authenticationSchemes` from configured auth
-- [ ] Integration tests over `httptest`: full user + group lifecycles;
+      _(`discovery.go` pre-marshals all three documents at `New`;
+      SPC flags are derived from the config (filter.maxResults =
+      MaxFilterResults, authenticationSchemes from `Auth.Scheme`); schemas
+      are deduplicated by URN across types + extensions; filtered
+      discovery queries → 403)_
+- [x] Integration tests over `httptest`: full user + group lifecycles;
       golden Entra/Okta traffic replayed through HTTP under `Default` and
       rejected appropriately under `Strict`; concurrent same-group PATCH
       storm under `-race`
-- [ ] Conformance tests: Table 8 status mapping + Table 9 error bodies;
+      _(`handler_test.go` lifecycles; `corpus_test.go` replays all 18
+      idpcorpus cases over HTTP incl. every Strict rejection;
+      `concurrency_test.go` + `toystore_test.go` storm the native and
+      striped-lock fallback paths, both race-clean)_
+- [x] Conformance tests: Table 8 status mapping + Table 9 error bodies;
       discovery documents validate against the vendored meta-schemas
+      _(`conformance_test.go` asserts status + scimType + Error schema
+      URN across endpoints; `discovery_test.go` decodes SPC and
+      ResourceType docs against the §8.7.2 meta-schemas — the Schema doc
+      is validated structurally because its `attributes.subAttributes`
+      nesting is the RFC §2.3.1 exception the decoder rightly forbids for
+      ordinary resources)_
+      _(surfaced + fixed a Phase-1 vendoring bug: `resource-type.json`
+      had `schemaExtensions` as `multiValued:false`; RFC 7643 §8.7.2
+      defines it `true` — corrected the source JSON and regenerated
+      `schema_gen.go`)_
 
 #### Success criteria (phase 4)
 
