@@ -22,14 +22,14 @@ func TestLenientParse(t *testing.T) {
 			name:   "bare not without parentheses",
 			source: "DESIGN-0001 open question decisions: bare-not is the documented IdP deviation",
 			input:  `not userName eq "x"`,
-			want:   Not{E: Compare{Path: Path{Attr: "userName"}, Op: OpEqual, Value: "x"}},
+			want:   NotExpr{E: Compare{Path: Path{Attr: "userName"}, Op: OpEqual, Value: "x"}},
 		},
 		{
 			name:   "bare not binds one clause",
 			source: "DESIGN-0001: bare not applies to the immediately following attribute expression",
 			input:  `not a pr and b pr`,
-			want: And{
-				L: Not{E: Present{Path: Path{Attr: "a"}}},
+			want: AndExpr{
+				L: NotExpr{E: Present{Path: Path{Attr: "a"}}},
 				R: Present{Path: Path{Attr: "b"}},
 			},
 		},
@@ -37,7 +37,7 @@ func TestLenientParse(t *testing.T) {
 			name:   "parenthesized not still parses",
 			source: "strict grammar remains a subset of lenient",
 			input:  `not (a pr)`,
-			want:   Not{E: Present{Path: Path{Attr: "a"}}},
+			want:   NotExpr{E: Present{Path: Path{Attr: "a"}}},
 		},
 	}
 	for _, tt := range tests {

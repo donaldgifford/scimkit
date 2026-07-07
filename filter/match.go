@@ -122,17 +122,17 @@ func pathText(p Path, includeSub bool) string {
 // inside a valuePath, where bare names resolve as its sub-attributes.
 func (ev *evaluator) validate(e Expr, parent *scim.Attribute) error {
 	switch t := e.(type) {
-	case And:
+	case AndExpr:
 		if err := ev.validate(t.L, parent); err != nil {
 			return err
 		}
 		return ev.validate(t.R, parent)
-	case Or:
+	case OrExpr:
 		if err := ev.validate(t.L, parent); err != nil {
 			return err
 		}
 		return ev.validate(t.R, parent)
-	case Not:
+	case NotExpr:
 		return ev.validate(t.E, parent)
 	case Compare:
 		return ev.validateCompare(&t, parent)
@@ -186,11 +186,11 @@ func (ev *evaluator) resolveTarget(p Path, parent *scim.Attribute) (*scim.Attrib
 // no error can arise here.
 func (ev *evaluator) eval(e Expr) bool {
 	switch t := e.(type) {
-	case And:
+	case AndExpr:
 		return ev.eval(t.L) && ev.eval(t.R)
-	case Or:
+	case OrExpr:
 		return ev.eval(t.L) || ev.eval(t.R)
-	case Not:
+	case NotExpr:
 		return !ev.eval(t.E)
 	case Compare:
 		return ev.evalCompare(&t)
@@ -335,11 +335,11 @@ func (ev *evaluator) evalValuePath(vp *ValuePath) bool {
 // bare attribute names resolve as sub-attributes of the parent.
 func (ev *evaluator) evalElement(e Expr, elem scim.ComplexValue, parent *scim.Attribute) bool {
 	switch t := e.(type) {
-	case And:
+	case AndExpr:
 		return ev.evalElement(t.L, elem, parent) && ev.evalElement(t.R, elem, parent)
-	case Or:
+	case OrExpr:
 		return ev.evalElement(t.L, elem, parent) || ev.evalElement(t.R, elem, parent)
-	case Not:
+	case NotExpr:
 		return !ev.evalElement(t.E, elem, parent)
 	case Compare:
 		sub, ok := ev.resolveTarget(t.Path, parent)

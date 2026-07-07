@@ -234,8 +234,11 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       matching, **per-element** valuePath correlation, `pr` on complex
       attributes, ordering ops on boolean/binary → `ErrInvalidFilter`,
       undefined attributes evaluate as no-value (never error)
-- [ ] Builder: `Eq`/`Ne`/`Co`/`Sw`/`Ew`/`Gt`/`Ge`/`Lt`/`Le`/`Pr`/`And`/
+- [x] Builder: `Eq`/`Ne`/`Co`/`Sw`/`Ew`/`Gt`/`Ge`/`Lt`/`Le`/`Pr`/`And`/
       `Or`/`Not`/`HasValue` with correct quoting/escaping
+      — noted deviation: the AST structs are `AndExpr`/`OrExpr`/`NotExpr`
+      so the builder functions can own the `And`/`Or`/`Not` names the
+      design's usage example shows (Go allows one meaning per identifier)
 - [ ] Property tests: builder → `String()` → `Parse` → equal AST;
       `Parse` → `String()` → `Parse` stable
 - [ ] Conformance tests: RFC §3.4.2.2 Figure 2 examples parse to expected

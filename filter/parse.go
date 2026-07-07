@@ -181,7 +181,7 @@ func (p *parser) parseOr() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = Or{L: left, R: right}
+		left = OrExpr{L: left, R: right}
 	}
 	return left, nil
 }
@@ -199,7 +199,7 @@ func (p *parser) parseAnd() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = And{L: left, R: right}
+		left = AndExpr{L: left, R: right}
 	}
 	return left, nil
 }
@@ -223,7 +223,7 @@ func (p *parser) parseUnary() (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Not{E: e}, nil
+	return NotExpr{E: e}, nil
 }
 
 func (p *parser) parsePrimary() (Expr, error) {

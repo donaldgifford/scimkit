@@ -53,7 +53,7 @@ func TestParsePath(t *testing.T) {
 			want: Path{
 				Attr:    "addresses",
 				SubAttr: "streetAddress",
-				ValueFilter: And{
+				ValueFilter: AndExpr{
 					L: Compare{Path: Path{Attr: "type"}, Op: OpEqual, Value: "work"},
 					R: Compare{Path: Path{Attr: "locality"}, Op: OpEqual, Value: "Hollywood"},
 				},

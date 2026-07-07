@@ -30,8 +30,8 @@ func TestParse(t *testing.T) {
 		{
 			name:  "keywords fold case",
 			input: `userName pr AND userName pr OR userName pr`,
-			want: Or{
-				L: And{L: Present{Path: userName}, R: Present{Path: userName}},
+			want: OrExpr{
+				L: AndExpr{L: Present{Path: userName}, R: Present{Path: userName}},
 				R: Present{Path: userName},
 			},
 		},
@@ -43,16 +43,16 @@ func TestParse(t *testing.T) {
 		{
 			name:  "and binds tighter than or",
 			input: `a pr or b pr and c pr`,
-			want: Or{
+			want: OrExpr{
 				L: Present{Path: Path{Attr: "a"}},
-				R: And{L: Present{Path: Path{Attr: "b"}}, R: Present{Path: Path{Attr: "c"}}},
+				R: AndExpr{L: Present{Path: Path{Attr: "b"}}, R: Present{Path: Path{Attr: "c"}}},
 			},
 		},
 		{
 			name:  "grouping overrides precedence",
 			input: `(a pr or b pr) and c pr`,
-			want: And{
-				L: Or{L: Present{Path: Path{Attr: "a"}}, R: Present{Path: Path{Attr: "b"}}},
+			want: AndExpr{
+				L: OrExpr{L: Present{Path: Path{Attr: "a"}}, R: Present{Path: Path{Attr: "b"}}},
 				R: Present{Path: Path{Attr: "c"}},
 			},
 		},
@@ -64,7 +64,7 @@ func TestParse(t *testing.T) {
 		{
 			name:  "not with parens",
 			input: `not (a eq "x")`,
-			want:  Not{E: Compare{Path: Path{Attr: "a"}, Op: OpEqual, Value: "x"}},
+			want:  NotExpr{E: Compare{Path: Path{Attr: "a"}, Op: OpEqual, Value: "x"}},
 		},
 		{
 			name:  "boolean literal",

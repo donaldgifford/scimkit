@@ -76,7 +76,7 @@ func (p Path) String() string {
 }
 
 // Expr is a parsed filter expression. Implementations are Compare, Present,
-// And, Or, Not, and ValuePath. String renders a re-parseable filter:
+// AndExpr, OrExpr, NotExpr, and ValuePath. String renders a re-parseable filter:
 // Parse(e.String()) yields an equal AST.
 type Expr interface {
 	isExpr()
@@ -98,18 +98,18 @@ type Present struct {
 	Path Path
 }
 
-// And is the logical conjunction; it binds tighter than Or.
-type And struct {
+// AndExpr is the logical conjunction; it binds tighter than OrExpr.
+type AndExpr struct {
 	L, R Expr
 }
 
-// Or is the logical disjunction, the loosest-binding operator.
-type Or struct {
+// OrExpr is the logical disjunction, the loosest-binding operator.
+type OrExpr struct {
 	L, R Expr
 }
 
-// Not is logical negation of a parenthesized filter; it binds tightest.
-type Not struct {
+// NotExpr is logical negation of a parenthesized filter; it binds tightest.
+type NotExpr struct {
 	E Expr
 }
 
@@ -122,9 +122,9 @@ type ValuePath struct {
 
 func (Compare) isExpr()   {}
 func (Present) isExpr()   {}
-func (And) isExpr()       {}
-func (Or) isExpr()        {}
-func (Not) isExpr()       {}
+func (AndExpr) isExpr()   {}
+func (OrExpr) isExpr()    {}
+func (NotExpr) isExpr()   {}
 func (ValuePath) isExpr() {}
 
 func (c Compare) String() string {
@@ -135,27 +135,27 @@ func (p Present) String() string {
 	return p.Path.String() + " pr"
 }
 
-// String parenthesizes Or operands: and binds tighter than or, so emitting
-// "a or b and c" for And{Or{a,b},c} would silently reparse as a different
+// String parenthesizes OrExpr operands: and binds tighter than or, so emitting
+// "a or b and c" for AndExpr{OrExpr{a,b},c} would silently reparse as a different
 // tree.
-func (a And) String() string {
+func (a AndExpr) String() string {
 	return andOperand(a.L) + " and " + andOperand(a.R)
 }
 
 func andOperand(e Expr) string {
-	if _, ok := e.(Or); ok {
+	if _, ok := e.(OrExpr); ok {
 		return "(" + e.String() + ")"
 	}
 	return e.String()
 }
 
-func (o Or) String() string {
+func (o OrExpr) String() string {
 	return o.L.String() + " or " + o.R.String()
 }
 
 // String always renders the strict grammar form not (filter), regardless of
 // how a lenient parse accepted the input.
-func (n Not) String() string {
+func (n NotExpr) String() string {
 	return "not (" + n.E.String() + ")"
 }
 

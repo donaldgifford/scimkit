@@ -66,7 +66,7 @@ func TestExprString(t *testing.T) {
 		},
 		{
 			name: "and",
-			expr: And{
+			expr: AndExpr{
 				L: Compare{Path: userName, Op: OpEqual, Value: "b"},
 				R: Compare{Path: active, Op: OpEqual, Value: true},
 			},
@@ -74,30 +74,30 @@ func TestExprString(t *testing.T) {
 		},
 		{
 			name: "or of ands needs no parens",
-			expr: Or{
-				L: And{L: Present{Path: title}, R: Present{Path: active}},
+			expr: OrExpr{
+				L: AndExpr{L: Present{Path: title}, R: Present{Path: active}},
 				R: Present{Path: userName},
 			},
 			want: `title pr and active pr or userName pr`,
 		},
 		{
 			name: "or operand of and is parenthesized",
-			expr: And{
-				L: Or{L: Present{Path: title}, R: Present{Path: active}},
+			expr: AndExpr{
+				L: OrExpr{L: Present{Path: title}, R: Present{Path: active}},
 				R: Present{Path: userName},
 			},
 			want: `(title pr or active pr) and userName pr`,
 		},
 		{
 			name: "not always parenthesizes",
-			expr: Not{E: Compare{Path: userName, Op: OpEqual, Value: "b"}},
+			expr: NotExpr{E: Compare{Path: userName, Op: OpEqual, Value: "b"}},
 			want: `not (userName eq "b")`,
 		},
 		{
 			name: "value path",
 			expr: ValuePath{
 				Path: Path{Attr: "emails"},
-				Filter: And{
+				Filter: AndExpr{
 					L: Compare{Path: Path{Attr: "type"}, Op: OpEqual, Value: "work"},
 					R: Compare{Path: Path{Attr: "value"}, Op: OpContains, Value: "@example.com"},
 				},
