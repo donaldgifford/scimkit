@@ -33,6 +33,7 @@ func widgetType(t *testing.T) scim.ResourceType {
 				{Name: "value", Type: scim.TypeString},
 				{Name: "type", Type: scim.TypeString},
 				{Name: "primary", Type: scim.TypeBoolean},
+				{Name: "display", Type: scim.TypeString},
 			}},
 		},
 	}.WithDefaults()

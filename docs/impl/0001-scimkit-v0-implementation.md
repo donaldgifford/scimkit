@@ -291,16 +291,26 @@ simulator input later.
       SynthesizeAddValuePath; Okta = Default — its one deviation,
       remove-members-by-value, is already shape tolerance; knob sets
       pinned by TestProfileDefinitions)_
-- [ ] `Apply` — add table: pathless merge, missing target creates, complex
+- [x] `Apply` — add table: pathless merge, missing target creates, complex
       merge, multi-valued append, single-valued replace, **idempotent
       no-change add** (`Changed=false`)
-- [ ] `Apply` — remove table: no path → `ErrNoTarget`; single/multi
+      _(multi-complex dedupe is by "value" sub-attribute identity when
+      the incoming element carries one — an IdP re-adding a group member
+      sends only the id while the stored element carries display/$ref —
+      whole-element equality otherwise; Changed via per-op before/after
+      valuesEqual over the closed stored-form set)_
+- [x] `Apply` — remove table: no path → `ErrNoTarget`; single/multi
       unassign; valuePath-selected removal; required/readOnly →
       `ErrMutability`
-- [ ] `Apply` — replace table: resource-level replace, whole-array replace,
+      _(removing an already-absent value is a Changed=false no-op — the
+      RFC mandates noTarget only for the missing-path case, and IdPs
+      re-send removes; valuePath targeting requires multi-valued
+      complex, matching filter.Match's model)_
+- [x] `Apply` — replace table: resource-level replace, whole-array replace,
       missing-attr → add fallback, complex **partial merge**, valuePath
       replace (all matching), valuePath+subAttr, non-matching valuePath →
-      `ErrNoTarget` (or add under `ReplaceNoTargetAsAdd`)
+      `ErrNoTarget` (or add under `ReplaceNoTargetAsAdd`; knob branch
+      lands with the synthesize task)
 - [ ] `SynthesizeAddValuePath`: manufacture element from eq-only
       conjunction filters, reject anything else
 - [ ] Cross-cutting apply behavior: sequential ops on working copy
