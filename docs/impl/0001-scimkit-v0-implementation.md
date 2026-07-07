@@ -225,9 +225,10 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       errors → `scim.ErrInvalidFilter` with position detail
 - [x] `ParsePath`: RFC 7644 Figure 7 grammar
       (`attrPath / valuePath [subAttr]`)
-- [ ] `Lenient` parse option: bare `not` and other documented off-grammar
+- [x] `Lenient` parse option: bare `not` and other documented off-grammar
       IdP shapes — each lenient acceptance covered by a test naming its
-      source
+      source (v0 accepts exactly bare `not`; further shapes require a
+      captured IdP request per the corpus discipline)
 - [ ] `Match` evaluator: schema-resolved `caseExact` string comparison,
       chronological `dateTime`, numeric compare, existential multi-valued
       matching, **per-element** valuePath correlation, `pr` on complex

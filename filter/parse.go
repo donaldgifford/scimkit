@@ -16,6 +16,17 @@ type parseConfig struct {
 	lenient bool
 }
 
+// Lenient makes Parse and ParsePath accept documented off-grammar shapes
+// some IdPs emit. v0 accepts exactly one: not without parentheses around
+// its operand ("not userName eq \"x\"" for the grammar's
+// "not (userName eq \"x\")"), the bare-not shape named in DESIGN-0001.
+// Lenient never changes rendering — String() always emits the strict
+// grammar form. Every future lenient acceptance must be covered by a test
+// naming the IdP shape that requires it.
+func Lenient() ParseOption {
+	return func(c *parseConfig) { c.lenient = true }
+}
+
 // Parse parses an RFC 7644 §3.4.2.2 filter with precedence not > and > or
 // (from the section's prose; the ABNF alone is ambiguous). Operators and
 // logical keywords fold case; compValue is a strict JSON literal. Syntax
