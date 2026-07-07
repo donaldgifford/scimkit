@@ -47,6 +47,11 @@ func TestExprString(t *testing.T) {
 			want: `title le 2.50`,
 		},
 		{
+			name: "off-set value renders unlexable diagnostic, not null",
+			expr: Compare{Path: title, Op: OpEqual, Value: 3.5},
+			want: `title eq !invalid(float64)`,
+		},
+		{
 			name: "present",
 			expr: Present{Path: title},
 			want: `title pr`,

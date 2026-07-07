@@ -104,16 +104,24 @@ func findAttr(attrs []scim.Attribute, name string) *scim.Attribute {
 	return nil
 }
 
-// pathText renders the Resource.Get path for a resolved filter path.
-func pathText(p Path, includeSub bool) string {
-	s := p.Attr
-	if p.URN != "" {
-		s = p.URN + ":" + s
-	}
-	if includeSub && p.SubAttr != "" {
+// fullPathText renders the Resource.Get path for a filter path, including
+// any sub-attribute.
+func fullPathText(p Path) string {
+	s := attrPathText(p)
+	if p.SubAttr != "" {
 		s += "." + p.SubAttr
 	}
 	return s
+}
+
+// attrPathText renders the Resource.Get path for a filter path's top-level
+// attribute only, dropping the sub-attribute — the existential emails.value
+// case fetches the whole multi-valued attribute and projects per element.
+func attrPathText(p Path) string {
+	if p.URN != "" {
+		return p.URN + ":" + p.Attr
+	}
+	return p.Attr
 }
 
 // validate walks the expression once before evaluation, rejecting ordering
@@ -225,7 +233,7 @@ func (ev *evaluator) candidates(r resolved, p Path) []any {
 	if r.existentialSub() {
 		return ev.subCandidates(r, p)
 	}
-	v, ok := ev.res.Get(pathText(p, true))
+	v, ok := ev.res.Get(fullPathText(p))
 	if !ok {
 		return []any{nil}
 	}
@@ -238,7 +246,7 @@ func (ev *evaluator) candidates(r resolved, p Path) []any {
 // subCandidates projects one sub-attribute across a multi-valued complex
 // attribute's elements: the emails.value existential shorthand.
 func (ev *evaluator) subCandidates(r resolved, p Path) []any {
-	v, ok := ev.res.Get(pathText(p, false))
+	v, ok := ev.res.Get(attrPathText(p))
 	if !ok {
 		return []any{nil}
 	}
@@ -299,7 +307,7 @@ func (ev *evaluator) evalPresent(p Present) bool {
 		}
 		return false
 	}
-	_, assigned := ev.res.Get(pathText(p.Path, true))
+	_, assigned := ev.res.Get(fullPathText(p.Path))
 	return assigned
 }
 
@@ -311,7 +319,7 @@ func (ev *evaluator) evalValuePath(vp *ValuePath) bool {
 	if !ok {
 		return false
 	}
-	v, assigned := ev.res.Get(pathText(vp.Path, true))
+	v, assigned := ev.res.Get(fullPathText(vp.Path))
 	if !assigned {
 		return false
 	}
@@ -477,12 +485,19 @@ func compareBool(got any, op Op, want any) bool {
 }
 
 // compareNumber compares integer and decimal stored forms against a number
-// literal in float64 space; int64 stored values fit exactly within SCIM's
-// practical ranges.
+// literal. An int64 stored value against an integer literal compares
+// exactly in int64 space — float64 has 53 mantissa bits, so distinct
+// integers above 2^53 would collide if converted. Only decimal stored
+// values and fractional literals go through float64.
 func compareNumber(got any, op Op, want any) bool {
 	n, ok := want.(json.Number)
 	if !ok {
 		return false
+	}
+	if g, isInt := got.(int64); isInt {
+		if w, err := n.Int64(); err == nil {
+			return compareOrdered(op, cmpNumeric(g, w), func() bool { return false })
+		}
 	}
 	w, err := n.Float64()
 	if err != nil {
@@ -497,13 +512,19 @@ func compareNumber(got any, op Op, want any) bool {
 	default:
 		return false
 	}
+	return compareOrdered(op, cmpNumeric(g, w), func() bool { return false })
+}
+
+// cmpNumeric is a three-way comparison shared by the exact-int64 and
+// float64 paths of compareNumber.
+func cmpNumeric[T int64 | float64](g, w T) int {
 	switch {
 	case g < w:
-		return compareOrdered(op, -1, func() bool { return false })
+		return -1
 	case g > w:
-		return compareOrdered(op, 1, func() bool { return false })
+		return 1
 	default:
-		return compareOrdered(op, 0, func() bool { return false })
+		return 0
 	}
 }
 

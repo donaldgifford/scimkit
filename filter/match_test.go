@@ -188,12 +188,16 @@ func TestMatchNumericComparison(t *testing.T) {
 		Attributes: []scim.Attribute{
 			{Name: "count", Type: scim.TypeInteger},
 			{Name: "ratio", Type: scim.TypeDecimal},
+			{Name: "big", Type: scim.TypeInteger},
 		},
 	}.WithDefaults()
 	rt := scim.ResourceType{Name: "Widget", Endpoint: "/Widgets", Schema: schema}
 	res := scim.NewResource(&rt)
 	require.NoError(t, res.Set("count", 42))
 	require.NoError(t, res.Set("ratio", 2.5))
+	// 2^53+1: the first integer float64 cannot represent. Comparing in
+	// float space would collapse it onto 2^53 and match the wrong literal.
+	require.NoError(t, res.Set("big", int64(9007199254740993)))
 
 	tests := []struct {
 		name   string
@@ -207,6 +211,10 @@ func TestMatchNumericComparison(t *testing.T) {
 		{name: "decimal lt", filter: `ratio lt 3`, want: true},
 		{name: "decimal ge", filter: `ratio ge 2.5`, want: true},
 		{name: "decimal ne", filter: `ratio ne 2.5`, want: false},
+		{name: "int64 exact above 2^53", filter: `big eq 9007199254740993`, want: true},
+		{name: "int64 adjacent literal above 2^53", filter: `big eq 9007199254740992`, want: false},
+		{name: "int64 ordering exact above 2^53", filter: `big gt 9007199254740992`, want: true},
+		{name: "int64 ne adjacent above 2^53", filter: `big ne 9007199254740992`, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

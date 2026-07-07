@@ -27,6 +27,13 @@ func TestBuilder(t *testing.T) {
 		{name: "ew", expr: Ew("userName", ".org"), want: `userName ew ".org"`},
 		{name: "gt int", expr: Gt("count", 3), want: `count gt 3`},
 		{name: "ge int64", expr: Ge("count", int64(9000000000)), want: `count ge 9000000000`},
+		{name: "int16", expr: Eq("count", int16(-3)), want: `count eq -3`},
+		{name: "uint", expr: Eq("count", uint(7)), want: `count eq 7`},
+		{
+			name: "uint64 above int64 range",
+			expr: Eq("count", uint64(18446744073709551615)),
+			want: `count eq 18446744073709551615`,
+		},
 		{name: "lt float", expr: Lt("ratio", 2.5), want: `ratio lt 2.5`},
 		{
 			name: "whole float keeps decimal point",
@@ -76,6 +83,16 @@ func TestBuilder(t *testing.T) {
 			name: "unparseable path kept verbatim",
 			expr: Pr("9bad path"),
 			want: `9bad path pr`,
+		},
+		{
+			name: "byte slice renders base64 matching binary comparison",
+			expr: Eq("x509Certificates.value", []byte("der-bytes")),
+			want: `x509Certificates.value eq "ZGVyLWJ5dGVz"`,
+		},
+		{
+			name: "unsupported value type renders visible diagnostic",
+			expr: Eq("a", struct{}{}),
+			want: `a eq "!invalid(struct {}: {})"`,
 		},
 	}
 	for _, tt := range tests {

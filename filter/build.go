@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -91,28 +92,58 @@ func builderPath(path string) Path {
 
 // normalizeValue maps natural Go values onto the AST's closed literal set
 // (string, json.Number, bool, nil). time.Time renders as RFC 3339 for
-// dateTime comparison; floats always carry a decimal point or exponent so a
-// builder-emitted decimal is never textually an integer literal.
+// dateTime comparison; []byte renders as base64 to match binary attribute
+// comparison; floats always carry a decimal point or exponent so a
+// builder-emitted decimal is never textually an integer literal. An
+// unsupported type renders as an "!invalid" diagnostic string so the
+// mistake is visible in the filter instead of silently mis-stringified.
 func normalizeValue(v any) any {
+	if n, ok := integerNumber(v); ok {
+		return n
+	}
 	switch t := v.(type) {
 	case nil, string, bool, json.Number:
 		return t
-	case int:
-		return json.Number(strconv.FormatInt(int64(t), 10))
-	case int32:
-		return json.Number(strconv.FormatInt(int64(t), 10))
-	case int64:
-		return json.Number(strconv.FormatInt(t, 10))
 	case float32:
 		return decimalNumber(float64(t))
 	case float64:
 		return decimalNumber(t)
 	case time.Time:
 		return t.Format(time.RFC3339)
+	case []byte:
+		return base64.StdEncoding.EncodeToString(t)
 	case scim.ReferenceValue:
 		return string(t)
 	default:
-		return fmt.Sprintf("%v", t)
+		return fmt.Sprintf("!invalid(%T: %v)", t, t)
+	}
+}
+
+// integerNumber maps every Go integer width onto an integer json.Number.
+func integerNumber(v any) (json.Number, bool) {
+	switch t := v.(type) {
+	case int:
+		return json.Number(strconv.FormatInt(int64(t), 10)), true
+	case int8:
+		return json.Number(strconv.FormatInt(int64(t), 10)), true
+	case int16:
+		return json.Number(strconv.FormatInt(int64(t), 10)), true
+	case int32:
+		return json.Number(strconv.FormatInt(int64(t), 10)), true
+	case int64:
+		return json.Number(strconv.FormatInt(t, 10)), true
+	case uint:
+		return json.Number(strconv.FormatUint(uint64(t), 10)), true
+	case uint8:
+		return json.Number(strconv.FormatUint(uint64(t), 10)), true
+	case uint16:
+		return json.Number(strconv.FormatUint(uint64(t), 10)), true
+	case uint32:
+		return json.Number(strconv.FormatUint(uint64(t), 10)), true
+	case uint64:
+		return json.Number(strconv.FormatUint(t, 10)), true
+	default:
+		return "", false
 	}
 }
 

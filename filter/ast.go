@@ -2,6 +2,7 @@ package filter
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -202,8 +203,9 @@ func literalString(v any) string {
 		}
 		return string(b)
 	default:
-		// Unreachable for parser- and builder-constructed ASTs; render
-		// something diagnosable for hand-built ones.
-		return litNull
+		// Unreachable for parser- and builder-constructed ASTs. A hand-built
+		// AST with an off-set value renders an unlexable diagnostic instead
+		// of masquerading as null — the broken filter fails loudly at parse.
+		return fmt.Sprintf("!invalid(%T)", v)
 	}
 }
