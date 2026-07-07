@@ -166,10 +166,13 @@ func (v ValuePath) String() string {
 // literalString renders a compValue literal. Strings go through
 // encoding/json so escaping matches the grammar's JSON string production
 // exactly.
+// litNull is the JSON null literal, shared by rendering and parsing.
+const litNull = "null"
+
 func literalString(v any) string {
 	switch t := v.(type) {
 	case nil:
-		return "null"
+		return litNull
 	case bool:
 		return strconv.FormatBool(t)
 	case json.Number:
@@ -184,6 +187,6 @@ func literalString(v any) string {
 	default:
 		// Unreachable for parser- and builder-constructed ASTs; render
 		// something diagnosable for hand-built ones.
-		return "null"
+		return litNull
 	}
 }

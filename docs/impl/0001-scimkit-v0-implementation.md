@@ -219,7 +219,7 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       `ResourceType` exists (go-architect decision)
 - [x] AST types (`Compare`, `Present`, `And`, `Or`, `Not`, `ValuePath`) +
       `Path`; `String()` renders a re-parseable filter
-- [ ] `Parse`: recursive descent with precedence climbing
+- [x] `Parse`: recursive descent with precedence climbing
       (`not` > `and` > `or`), case-insensitive operators/names, strict JSON
       literal `compValue` (incl. `null`), grouping, valuePath; syntax
       errors → `scim.ErrInvalidFilter` with position detail
