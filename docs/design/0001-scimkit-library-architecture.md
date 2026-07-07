@@ -188,7 +188,10 @@ scim  ←  filter  ←  patch  ←  server  ←  scimtest  ←  cmd/scimkit
    ↖────  client  ─────────────────────↗
 ```
 
-`scim` imports only the stdlib. `client` needs `scim` + `filter` (builder)
+`scim` imports no third-party modules — only the stdlib (repo-internal
+helpers under `internal/`, like the schema generator, are fine; the
+constraint is on the dependency graph, not the module layout). `client`
+needs `scim` + `filter` (builder)
 only. Nothing imports `server` except `scimtest` and `cmd`. This keeps each
 primitive independently consumable (Goal 1) and makes an eventual mock
 spin-off a clean cut along the `scimtest`/`cmd` seam.
