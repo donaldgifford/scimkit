@@ -978,6 +978,7 @@ func ResourceTypeSchema() Schema {
 			{
 				Name:        "schemaExtensions",
 				Type:        TypeComplex,
+				MultiValued: true,
 				Description: "A list of URIs of the resource type's schema extensions.",
 				Required:    true,
 				Mutability:  MutabilityReadOnly,
