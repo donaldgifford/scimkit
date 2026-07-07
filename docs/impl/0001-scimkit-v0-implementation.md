@@ -318,10 +318,14 @@ simulator input later.
       match keep working; non-seedable filters fall through to the
       strict noTarget error; ReplaceNoTargetAsAdd shares the same
       synthesis tail)_
-- [ ] Cross-cutting apply behavior: sequential ops on working copy
+- [x] Cross-cutting apply behavior: sequential ops on working copy
       (atomicity via `Clone`), `primary` auto-demotion, implicit `schemas`
       maintenance for URN-qualified paths, mutability enforcement
       (immutable add only when unassigned)
+      _(schemas maintenance is free: Apply mutates only through
+      Resource.Set and schemas derives from extension containers; the
+      group-member no-op success criterion is pinned end to end under
+      the Okta profile)_
 - [ ] Golden IdP corpus: `testdata/idp/{entra,okta,onelogin}/*.json`
       authored from documented shapes, each fixture carrying a `_source`
       URL field; shared loader package for tests and (later) the simulator
