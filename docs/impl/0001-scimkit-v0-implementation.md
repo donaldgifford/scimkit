@@ -210,9 +210,13 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
 
 #### Tasks (phase 2)
 
-- [ ] Tokenizer with URN-aware `attrPath` splitting: longest match against
+- [x] Tokenizer with URN-aware `attrPath` splitting: longest match against
       registered schema URNs, last-colon fallback for unknown URNs; accept
       `$ref` (cross-RFC `nameChar` inconsistency)
+      — implemented as pure last-colon splitting: `ATTRNAME` cannot contain
+      `:`, so the split is structurally exact; URN classification against
+      the resource type's declared schemas happens in `Match`, where a
+      `ResourceType` exists (go-architect decision)
 - [ ] AST types (`Compare`, `Present`, `And`, `Or`, `Not`, `ValuePath`) +
       `Path`; `String()` renders a re-parseable filter
 - [ ] `Parse`: recursive descent with precedence climbing
