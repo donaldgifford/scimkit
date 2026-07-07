@@ -217,7 +217,7 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       `:`, so the split is structurally exact; URN classification against
       the resource type's declared schemas happens in `Match`, where a
       `ResourceType` exists (go-architect decision)
-- [ ] AST types (`Compare`, `Present`, `And`, `Or`, `Not`, `ValuePath`) +
+- [x] AST types (`Compare`, `Present`, `And`, `Or`, `Not`, `ValuePath`) +
       `Path`; `String()` renders a re-parseable filter
 - [ ] `Parse`: recursive descent with precedence climbing
       (`not` > `and` > `or`), case-insensitive operators/names, strict JSON
