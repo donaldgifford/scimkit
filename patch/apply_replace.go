@@ -63,6 +63,9 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 		return err
 	}
 	if len(matches) == 0 {
+		if a.profile.ReplaceNoTargetAsAdd {
+			return a.synthesizeElement(op, sub, index)
+		}
 		return scim.ErrNoTarget(opLabel(index) + ": no value matches the filter on " + attr.Name)
 	}
 	if sub != nil {

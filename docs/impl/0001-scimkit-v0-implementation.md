@@ -311,8 +311,13 @@ simulator input later.
       replace (all matching), valuePath+subAttr, non-matching valuePath →
       `ErrNoTarget` (or add under `ReplaceNoTargetAsAdd`; knob branch
       lands with the synthesize task)
-- [ ] `SynthesizeAddValuePath`: manufacture element from eq-only
+- [x] `SynthesizeAddValuePath`: manufacture element from eq-only
       conjunction filters, reject anything else
+      _(eligibility is checked at apply time when no element matches —
+      not at decode — so legitimate non-eq valuePath filters that do
+      match keep working; non-seedable filters fall through to the
+      strict noTarget error; ReplaceNoTargetAsAdd shares the same
+      synthesis tail)_
 - [ ] Cross-cutting apply behavior: sequential ops on working copy
       (atomicity via `Clone`), `primary` auto-demotion, implicit `schemas`
       maintenance for URN-qualified paths, mutability enforcement
