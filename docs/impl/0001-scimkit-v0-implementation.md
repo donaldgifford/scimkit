@@ -223,7 +223,7 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
       (`not` > `and` > `or`), case-insensitive operators/names, strict JSON
       literal `compValue` (incl. `null`), grouping, valuePath; syntax
       errors → `scim.ErrInvalidFilter` with position detail
-- [ ] `ParsePath`: RFC 7644 Figure 7 grammar
+- [x] `ParsePath`: RFC 7644 Figure 7 grammar
       (`attrPath / valuePath [subAttr]`)
 - [ ] `Lenient` parse option: bare `not` and other documented off-grammar
       IdP shapes — each lenient acceptance covered by a test naming its

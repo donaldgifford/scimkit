@@ -2,7 +2,9 @@ package filter
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/donaldgifford/scimkit/scim"
 )
@@ -31,6 +33,32 @@ func Parse(s string, opts ...ParseOption) (Expr, error) {
 		return nil, p.errorf("expected end of filter, found %s", p.tok.kind)
 	}
 	return e, nil
+}
+
+// ParsePath parses an RFC 7644 §3.5.2 PATCH path (Figure 7): attrPath, or
+// valuePath with an optional trailing subAttr, e.g.
+// emails[type eq "work"].value. Errors are scim.ErrInvalidPath.
+func ParsePath(s string, opts ...ParseOption) (Path, error) {
+	p, err := newParser(s, opts...)
+	if err != nil {
+		return Path{}, pathError(err)
+	}
+	path, err := p.parsePath()
+	if err != nil {
+		return Path{}, pathError(err)
+	}
+	return path, nil
+}
+
+// pathError reclassifies parse errors as invalidPath: the same grammar
+// machinery serves both filters and PATCH paths, but RFC 7644 Table 9
+// assigns malformed paths their own scimType.
+func pathError(err error) error {
+	var scimErr *scim.Error
+	if errors.As(err, &scimErr) {
+		return scim.ErrInvalidPath(scimErr.Detail)
+	}
+	return scim.ErrInvalidPath(err.Error())
 }
 
 // parser is a recursive-descent parser with one token of lookahead.
@@ -70,6 +98,63 @@ func (p *parser) errorf(format string, args ...any) error {
 // case-insensitively.
 func (p *parser) word(keyword string) bool {
 	return p.tok.kind == tokWord && scim.FoldName(p.tok.text) == keyword
+}
+
+func (p *parser) parsePath() (Path, error) {
+	if p.tok.kind != tokWord {
+		return Path{}, p.errorf("expected attribute path, found %s", p.tok.kind)
+	}
+	word := p.tok
+	urn, attr, sub, err := splitAttrPath(word.text, word.pos)
+	if err != nil {
+		return Path{}, err
+	}
+	path := Path{URN: urn, Attr: attr, SubAttr: sub}
+	if err := p.advance(); err != nil {
+		return Path{}, err
+	}
+	if p.tok.kind == tokLBracket {
+		if err := p.parseValueFilterInto(&path); err != nil {
+			return Path{}, err
+		}
+	}
+	if p.tok.kind != tokEOF {
+		return Path{}, p.errorf("expected end of path, found %s", p.tok.kind)
+	}
+	return path, nil
+}
+
+// parseValueFilterInto consumes "[" valFilter "]" [subAttr] into path.
+func (p *parser) parseValueFilterInto(path *Path) error {
+	if path.SubAttr != "" {
+		return p.errorf("value filter must follow the attribute, not sub-attribute %q", path.SubAttr)
+	}
+	if err := p.advance(); err != nil { // consume '['
+		return err
+	}
+	f, err := p.parseOr()
+	if err != nil {
+		return err
+	}
+	if p.tok.kind != tokRBracket {
+		return p.errorf("expected ']' to close value filter, found %s", p.tok.kind)
+	}
+	if err := p.advance(); err != nil {
+		return err
+	}
+	path.ValueFilter = f
+	if p.tok.kind != tokWord {
+		return nil
+	}
+	subWord, ok := strings.CutPrefix(p.tok.text, ".")
+	if !ok {
+		return p.errorf("expected .subAttr after value filter, found %q", p.tok.text)
+	}
+	if err := validAttrName(subWord); err != nil {
+		return p.errorf("invalid sub-attribute after value filter: %v", err)
+	}
+	path.SubAttr = subWord
+	return p.advance()
 }
 
 func (p *parser) parseOr() (Expr, error) {
