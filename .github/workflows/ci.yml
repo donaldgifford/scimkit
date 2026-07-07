@@ -62,6 +62,9 @@ jobs:
       - name: Run unit tests
         run: just test-coverage
 
+      - name: Enforce coverage floor
+        run: just coverage-gate
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
         with:

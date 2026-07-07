@@ -80,6 +80,11 @@ test-pkg pkg:
 test-coverage:
     @go test -v -race -coverprofile={{ coverage_out }} ./...
 
+# Enforce the per-package coverage floor (80%; cmd/ + generated exempt)
+[group('test')]
+coverage-gate:
+    @./scripts/coverage-gate.sh {{ coverage_out }}
+
 # Run tests and open the HTML coverage report
 [group('test')]
 test-report:
