@@ -23,11 +23,13 @@ type typeSpec struct {
 // mockConfig accumulates option state before NewMock materializes the
 // stores and handler.
 type mockConfig struct {
-	types   []typeSpec
-	profile patch.Profile
-	token   string
-	baseURL string
-	logger  *slog.Logger
+	types    []typeSpec
+	profile  patch.Profile
+	token    string
+	baseURL  string
+	logger   *slog.Logger
+	seed     Seed
+	seedJSON []byte
 }
 
 // defaultConfig is the mock's baseline: strict validation (the scimtest
@@ -64,6 +66,24 @@ func WithBearerToken(token string) Option {
 //nolint:gocritic // rt is passed by value to match scim/memstore constructor style
 func WithResourceType(rt scim.ResourceType, opts ...memstore.Option) Option {
 	return func(c *mockConfig) { c.types = append(c.types, typeSpec{rt: rt, opts: opts}) }
+}
+
+// WithSeed preloads the mock with resources before it serves any request.
+// Each resource is created through the real pipeline, so it carries a
+// server-assigned id and meta. Multiple WithSeed/WithSeedJSON options
+// accumulate.
+func WithSeed(seed Seed) Option {
+	return func(c *mockConfig) {
+		c.seed.Users = append(c.seed.Users, seed.Users...)
+		c.seed.Groups = append(c.seed.Groups, seed.Groups...)
+	}
+}
+
+// WithSeedJSON preloads the mock from a raw seed document — the same shape
+// LoadSeedFile decodes — for inline go test literals. A malformed document
+// surfaces as a NewMock error.
+func WithSeedJSON(data []byte) Option {
+	return func(c *mockConfig) { c.seedJSON = append(c.seedJSON, data...) }
 }
 
 // WithLogger routes the mock's request and startup logging to l.

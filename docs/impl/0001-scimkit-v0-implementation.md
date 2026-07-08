@@ -594,8 +594,20 @@ The testing story and the shippable artifact.
       closable resources. Default profile is `patch.Strict`, the scimtest
       posture; `ExemptServiceProviderConfig` is on so capability
       discovery works before a token is held)_
-- [ ] Seed format (JSON users/groups) + loader shared by
+- [x] Seed format (JSON users/groups) + loader shared by
       `scimtest.WithSeed` and the CLI `--seed` flag
+      _(`Seed{Users,Groups []json.RawMessage}` — each entry a bare SCIM
+      body, no envelope. `DecodeSeed(io.Reader)`/`LoadSeedFile(path)` are
+      the one shared decode path; `WithSeed(Seed)` and `WithSeedJSON([]byte)`
+      accumulate. Deviation from the DESIGN-0001 `WithSeed(users, groups)`
+      sketch: collapsed to one `Seed` value so the CLI file loader and the
+      test option share it. Load-bearing decision: seeding replays each
+      entry through the real create pipeline via
+      `httptest.NewRequestWithContext` + `handler.ServeHTTP` against the
+      bare handler before the recorder wraps it — so seeded resources get
+      identical id/meta/validation and setup traffic never pollutes the
+      Recorder. A malformed doc or pipeline-rejected resource fails
+      NewMock)_
 - [ ] Scenario engine: step model with request templates, variable
       capture/substitution (created IDs), per-step expectations; payloads
       sourced from the phase-3 golden corpus (Open Questions Q5)

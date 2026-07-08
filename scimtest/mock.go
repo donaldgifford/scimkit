@@ -1,6 +1,7 @@
 package scimtest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -45,12 +46,14 @@ func NewMock(opts ...Option) (*Mock, error) {
 
 	regs := make([]server.Registration, 0, len(cfg.types))
 	stores := make(map[string]server.Store, len(cfg.types))
+	endpoints := make(map[string]string, len(cfg.types))
 	for i := range cfg.types {
 		ts := &cfg.types[i]
 		storeOpts := append([]memstore.Option{memstore.WithProfile(cfg.profile)}, ts.opts...)
 		st := memstore.New(ts.rt, storeOpts...)
 		regs = append(regs, server.Registration{Type: ts.rt, Store: st})
 		stores[storeKey(ts.rt.Name)] = st
+		endpoints[storeKey(ts.rt.Name)] = ts.rt.Endpoint
 	}
 
 	handler, err := server.New(server.Config{
@@ -66,6 +69,16 @@ func NewMock(opts ...Option) (*Mock, error) {
 		return nil, fmt.Errorf("scimtest: build mock: %w", err)
 	}
 
+	seed, err := resolveSeed(&cfg)
+	if err != nil {
+		return nil, err
+	}
+	if !seed.empty() {
+		if serr := applySeed(handler, seed, endpoints, cfg.token); serr != nil {
+			return nil, serr
+		}
+	}
+
 	rec := &Recorder{}
 	return &Mock{
 		handler:  rec.wrap(handler),
@@ -74,6 +87,22 @@ func NewMock(opts ...Option) (*Mock, error) {
 		token:    cfg.token,
 		baseURL:  cfg.baseURL,
 	}, nil
+}
+
+// resolveSeed merges the structured seed with any raw seedJSON supplied via
+// WithSeedJSON, decoding the latter and reporting a malformed document.
+func resolveSeed(cfg *mockConfig) (Seed, error) {
+	seed := cfg.seed
+	if len(cfg.seedJSON) == 0 {
+		return seed, nil
+	}
+	extra, err := DecodeSeed(bytes.NewReader(cfg.seedJSON))
+	if err != nil {
+		return Seed{}, err
+	}
+	seed.Users = append(seed.Users, extra.Users...)
+	seed.Groups = append(seed.Groups, extra.Groups...)
+	return seed, nil
 }
 
 // Handler returns the mock's http.Handler for mounting on a listener or an
