@@ -79,9 +79,16 @@ func NewMock(opts ...Option) (*Mock, error) {
 		}
 	}
 
+	// Chaos wraps the SCIM handler; the recorder wraps chaos so injected
+	// failures are still captured. Seeding above used the bare handler, so
+	// it is unaffected by either layer.
+	served := handler
+	if cfg.chaos != nil {
+		served = newChaosHandler(*cfg.chaos, handler)
+	}
 	rec := &Recorder{}
 	return &Mock{
-		handler:  rec.wrap(handler),
+		handler:  rec.wrap(served),
 		stores:   stores,
 		recorder: rec,
 		token:    cfg.token,

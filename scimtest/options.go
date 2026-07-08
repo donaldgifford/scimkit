@@ -30,6 +30,7 @@ type mockConfig struct {
 	logger   *slog.Logger
 	seed     Seed
 	seedJSON []byte
+	chaos    *ChaosConfig
 }
 
 // defaultConfig is the mock's baseline: strict validation (the scimtest

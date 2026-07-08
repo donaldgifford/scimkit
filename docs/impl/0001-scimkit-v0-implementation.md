@@ -664,8 +664,20 @@ The testing story and the shippable artifact.
       `--seed`, `--profile`, `--latency`, `--fail-rate`), `exercise`
       (`--target`, `--token`, `--scenario`, `--report`), `version`; slog
       default handler, SIGTERM graceful shutdown
-- [ ] Chaos middleware for the mock: injected latency + failure rate (for
+- [x] Chaos middleware for the mock: injected latency + failure rate (for
       consumer retry testing)
+      _(`ChaosConfig{Latency, FailRate, FailStatus, Rand}` + `WithChaos`.
+      Lives in scimtest so both the CLI mock and go-test mock opt in the
+      same way. Injected failure defaults to 503 (the client's
+      default-retryable code) with a SCIM error body. Determinism: a
+      caller-supplied `*math/rand/v2.Rand` is guarded by a mutex (a bare
+      `rand.New` is not concurrency-safe) so seeded chaos is both
+      reproducible and race-clean under concurrent storms; nil uses the
+      auto-seeded, concurrency-safe package source. Latency injection
+      selects on `time.After` vs `r.Context().Done()` so a cancelled
+      request never blocks a goroutine. Composition: chaos sits between the
+      recorder (outermost) and the SCIM handler, so failures are recorded
+      and seeding — through the bare handler — is unaffected)_
 - [ ] CI self-check: `exercise` running `rfc-strict-lifecycle` against
       `scimtest.NewServer` (the simulator validates the mock, the mock
       validates the simulator)
