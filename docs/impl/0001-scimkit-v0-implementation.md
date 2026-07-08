@@ -575,10 +575,25 @@ The testing story and the shippable artifact.
 
 #### Tasks (phase 6)
 
-- [ ] `scimtest.NewServer(t, opts...)`: resource-type/seed/profile/token
+- [x] `scimtest.NewServer(t, opts...)`: resource-type/seed/profile/token
       options, `httptest` lifecycle with `t.Cleanup`, `URL`/`Client()`/
       `Store()` accessors, request **Recorder** for asserting what a
       provisioner sent
+      _(go-architect decision: split into `NewMock(opts...)` (no test
+      dependency, drives both go test and the CLI) and `NewServer(tb,
+      opts...)` wrapping it with an `httptest.Server` + `t.Cleanup`.
+      `Server` embeds `*Mock`, promoting `Handler`/`Store`/`Recorder`.
+      The base-URL chicken-and-egg — the handler bakes `meta.location`
+      but the httptest port is unknown until it starts — is solved by a
+      `lazyHandler` (`atomic.Pointer[http.Handler]`, race-clean) served
+      first, then swapped for the real handler once the URL is known.
+      `Store(name)` returns `server.Store` keyed by folded type name;
+      assert `server.Patcher` for native PATCH. Deviation from the
+      DESIGN-0001 sketch: dropped the speculative no-op `Mock.Close()` —
+      it freed nothing and only tripped errcheck; httptest/CLI own the
+      closable resources. Default profile is `patch.Strict`, the scimtest
+      posture; `ExemptServiceProviderConfig` is on so capability
+      discovery works before a token is held)_
 - [ ] Seed format (JSON users/groups) + loader shared by
       `scimtest.WithSeed` and the CLI `--seed` flag
 - [ ] Scenario engine: step model with request templates, variable
