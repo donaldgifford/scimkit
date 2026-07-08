@@ -12,3 +12,13 @@ const (
 	KindRemove  Kind = "remove"
 	KindReplace Kind = "replace"
 )
+
+// valid reports whether k is one of the three canonical operation kinds.
+func (k Kind) valid() bool {
+	switch k {
+	case KindAdd, KindRemove, KindReplace:
+		return true
+	default:
+		return false
+	}
+}
