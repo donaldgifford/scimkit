@@ -625,10 +625,26 @@ The testing story and the shippable artifact.
       indexes arrays by numeric token. Unassigned honors SCIM's
       null/[]/absent equivalence; value equality coerces int↔float64.
       Engine is pure functions, unit-tested without a live server)_
-- [ ] Scenario catalog: `rfc-strict-lifecycle`, `entra-user-lifecycle`,
+- [x] Scenario catalog: `rfc-strict-lifecycle`, `entra-user-lifecycle`,
       `entra-group-membership` (one-member-per-PATCH storm),
       `okta-user-lifecycle` (lookup→create→PUT), `okta-group-put`,
       `onelogin-lookup-dance`
+      _(go-architect Q5 decision: Go builders for flow/capture/assertions,
+      JSON payloads pulled from the existing `internal/idpcorpus` embed —
+      no new DSL, no new embed. Scenario identity is a string constant
+      resolved via `LookupScenario(name)` (deviation from the DESIGN-0001
+      typed-value sketch, so `Simulate` takes a built `Scenario` and stays
+      reusable for hand-authored ones); `ScenarioNames()` is the fixed
+      6-entry list. A `scenarioBuilder` defers the first corpus-miss error
+      to `build`, which also runs `validateScenario` (every step needs a
+      method + non-zero status — a malformed scenario is a build error,
+      never a silent step failure). Each IdP scenario embeds that
+      provider's real PatchOp bytes and encodes the success expectation, so
+      it passes against a matching-profile target and fails with a diff
+      otherwise. okta-group-put deliberately makes the destructive
+      members-less PUT visible; onelogin-lookup-dance reproduces
+      duplicate-group creation. Expectations validated end-to-end by the
+      Task-5 self-check runs)_
 - [ ] `Simulate(ctx, target, token, scenario)` + report model with JSON
       and human-readable renderers
 - [ ] CLI (stdlib `flag`, subcommand dispatch): `mock` (`--addr`,
