@@ -608,9 +608,23 @@ The testing story and the shippable artifact.
       identical id/meta/validation and setup traffic never pollutes the
       Recorder. A malformed doc or pipeline-rejected resource fails
       NewMock)_
-- [ ] Scenario engine: step model with request templates, variable
+- [x] Scenario engine: step model with request templates, variable
       capture/substitution (created IDs), per-step expectations; payloads
       sourced from the phase-3 golden corpus (Open Questions Q5)
+      _(`Scenario`→`Step`→`Expectation`/`Capture`/`BodyAssertion` (fields
+      mirror `idpcorpus.PathAssertion`). Path/Body carry `text/template`
+      actions resolved against captured vars with `missingkey=error`, so a
+      broken capture chain fails loudly rather than sending an empty
+      segment; corpus bodies have no actions, so substitution is a no-op
+      for them. `applyCaptures` binds response values as string vars.
+      `evaluate` returns one message per failure (status, scimType,
+      headers, body). The load-bearing piece is `lookupPath`: a
+      greedy-longest-match resolver — extension-URN keys contain literal
+      dots (`2.0`), so it matches the longest run of dot-tokens against a
+      real map key with backtracking before falling to shorter runs, and
+      indexes arrays by numeric token. Unassigned honors SCIM's
+      null/[]/absent equivalence; value equality coerces int↔float64.
+      Engine is pure functions, unit-tested without a live server)_
 - [ ] Scenario catalog: `rfc-strict-lifecycle`, `entra-user-lifecycle`,
       `entra-group-membership` (one-member-per-PATCH storm),
       `okta-user-lifecycle` (lookup→create→PUT), `okta-group-put`,
