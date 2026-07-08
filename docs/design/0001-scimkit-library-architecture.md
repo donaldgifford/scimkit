@@ -185,16 +185,19 @@ Dependency direction is strictly one-way:
 
 ```text
 scim  ←  filter  ←  patch  ←  server  ←  scimtest  ←  cmd/scimkit
-   ↖────  client  ─────────────────────↗
+   ↖────  patch  ←  client  ────────────↗
 ```
 
 `scim` imports no third-party modules — only the stdlib (repo-internal
 helpers under `internal/`, like the schema generator, are fine; the
 constraint is on the dependency graph, not the module layout). `client`
-needs `scim` + `filter` (builder)
-only. Nothing imports `server` except `scimtest` and `cmd`. This keeps each
-primitive independently consumable (Goal 1) and makes an eventual mock
-spin-off a clean cut along the `scimtest`/`cmd` seam.
+needs `scim` + `filter` (builder) + `patch` — the `patch` edge is real:
+`client.Patch(ctx, id, ops []patch.Op)` takes `patch.Op`, and the client
+renders ops to the wire with `patch.EncodeOps` (IMPL-0001 phase 5,
+go-architect decision B). It does **not** import `server`. Nothing
+imports `server` except `scimtest` and `cmd`. This keeps each primitive
+independently consumable (Goal 1) and makes an eventual mock spin-off a
+clean cut along the `scimtest`/`cmd` seam.
 
 ### Core resource model (`scim`)
 

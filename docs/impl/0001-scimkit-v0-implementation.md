@@ -494,28 +494,69 @@ The generic typed provisioner client.
 
 #### Tasks (phase 5)
 
-- [ ] Transport core: base-URL joining, SCIM headers, context plumbing,
+- [x] Transport core: base-URL joining, SCIM headers, context plumbing,
       error-body decode to `scim.Error` (string or int `status`)
-- [ ] Retry policy: 429 honoring `Retry-After` (seconds and HTTP-date),
+      _(`client.go`/`transport.go`: `New` validates an absolute base URL;
+      `requestURL` builds every URL with `url.JoinPath` so ids escape
+      correctly; `do` rebuilds a fresh request per attempt from an
+      immutable body (no GetBody needed); `decodeError` maps any non-2xx
+      body to a `*scim.Error`, synthesizing one for non-SCIM bodies)_
+- [x] Retry policy: 429 honoring `Retry-After` (seconds and HTTP-date),
       doubling backoff with jitter and `MaxAttempts` cap (Okta's
       protocol); configurable 5xx retry; request context deadlines
       respected
-- [ ] Generic `Resources(name)` service: Create/Get/Replace/Patch/Delete
+      _(`retry.go`: `RetryConfig` pure data + `DefaultRetryConfig`
+      (Okta's 10-attempt protocol); `backoffDelay` capped exponential
+      with partial jitter via `math/rand/v2`; `parseRetryAfter` handles
+      delta-seconds and HTTP-date; Retry-After overrides the computed
+      delay; the `sleeper` seam aborts on context cancellation and makes
+      retry tests sleepless; exhaustion → typed `RetryExhaustedError`)_
+- [x] Generic `Resources(name)` service: Create/Get/Replace/Patch/Delete
       returning `*scim.Resource`
-- [ ] Typed `Users()` / `Groups()` wrappers over the generic service
-- [ ] `List`: `iter.Seq2[T, error]` with transparent pagination,
+      _(`resources.go`: type resolved lazily from discovery and cached on
+      the Client; empty PATCH/PUT response bodies are filled with a
+      follow-up Get so callers always get the full resource)_
+- [x] Typed `Users()` / `Groups()` wrappers over the generic service
+      _(`users.go`/`groups.go` embed `*ResourceService` built from the
+      library's own User/Group schemas — no discovery round trip)_
+- [x] `List`: `iter.Seq2[T, error]` with transparent pagination,
       duplicate/gap tolerance (non-snapshot semantics), `Query` mapping to
       params; opt-in `POST /.search` transport for PII-bearing filters
-- [ ] Provisioner helpers: `Lookup` (0-or-1 from filter), `EnsureMember` /
+      _(`query.go`: pagination advances by items received not requested,
+      terminates on short/empty page OR reaching TotalResults, yields an
+      error once then stops; `WithSearchTransport` / `Query.Search` route
+      through POST /.search)_
+- [x] Provisioner helpers: `Lookup` (0-or-1 from filter), `EnsureMember` /
       `RemoveMember` (spec-shaped valuePath PATCHes, already-present/absent
       = success), `Deactivate` (`active:false`)
-- [ ] `Capabilities()`: fetch/parse/cache SPC; PATCH→PUT write fallback
+      _(`Lookup` uses Count:2 to detect ambiguity → `ErrAmbiguousLookup`,
+      empty result is nil-not-error; membership helpers are sugar over
+      `Patch` (so fallback/retry/error-typing apply uniformly); set
+      semantics come from the patch engine's value-identity dedupe;
+      `RemoveMember` also tolerates a wrong `noTarget` from the target)_
+- [x] `Capabilities()`: fetch/parse/cache SPC; PATCH→PUT write fallback
       when the target advertises `patch.supported=false` (or returns 501)
-- [ ] ETag support: `If-Match` on writes when etags advertised; 412 as
+      _(`capabilities.go`: mutex+field cache (not sync.Once, so a
+      transient failure is not cached) + `InvalidateCapabilities`;
+      `Patch` consults `PatchSupported` and also falls back on a live
+      501; the fallback is Get → `patch.Apply` (Strict) → Replace with
+      the fetched version as the CAS token)_
+- [x] ETag support: `If-Match` on writes when etags advertised; 412 as
       typed conflict error
-- [ ] Integration tests against `server`+`memstore` over `httptest`; retry
+      _(`Replace` sends `If-Match` opportunistically whenever the
+      resource carries a `meta.version` — strictly safer than gating on
+      the advertised flag; 412 surfaces as `*ConflictError` unwrapping to
+      the `*scim.Error`)_
+- [x] Integration tests against `server`+`memstore` over `httptest`; retry
       behavior against a scripted flaky handler (429 sequences, Retry-After
       variants, deadline expiry)
+      _(`client_test.go`/`services_test.go`/`fallback_test.go`/
+      `discovery_test.go`/`options_test.go` integration; `retry_test.go`
+      scripted flaky handler with a fake clock asserting exact attempt
+      counts, per-retry sleeps, Retry-After honoring, exhaustion typing,
+      and clean context-cancellation abort; 83.4% coverage)_
+      _(prerequisite `patch.EncodeOps` added — go-architect decision B —
+      renders `[]patch.Op` to a strict PatchOp wire body)_
 
 #### Success criteria (phase 5)
 
