@@ -645,8 +645,21 @@ The testing story and the shippable artifact.
       members-less PUT visible; onelogin-lookup-dance reproduces
       duplicate-group creation. Expectations validated end-to-end by the
       Task-5 self-check runs)_
-- [ ] `Simulate(ctx, target, token, scenario)` + report model with JSON
+- [x] `Simulate(ctx, target, token, scenario)` + report model with JSON
       and human-readable renderers
+      _(go-architect decision C: raw `net/http` single-shot transport, not
+      the client package — scenarios must send shapes `patch.EncodeOps`
+      can't produce and assert on exact status/scimType/headers the client
+      collapses. Fail-fast: the first failing step aborts (later steps
+      reference its captures), setting `Aborted`/`AbortedAt`; `Passed` is
+      true only when every step passed. `Report.JSON()` and `.Text()`
+      (aligned PASS/FAIL table + failure detail) render both ways;
+      `RecordedIO.Body` is normalized to valid-JSON-or-nil so the report
+      always marshals. Validated end-to-end: `TestSimulateCatalog` runs all
+      6 scenarios against matching-profile mocks (all pass), and
+      `TestSimulateSelfCheck` proves a healthy mock passes
+      rfc-strict-lifecycle while a wrong-token config fails it — the CI
+      self-check contract. scimtest coverage 88.2%)_
 - [ ] CLI (stdlib `flag`, subcommand dispatch): `mock` (`--addr`,
       `--seed`, `--profile`, `--latency`, `--fail-rate`), `exercise`
       (`--target`, `--token`, `--scenario`, `--report`), `version`; slog
