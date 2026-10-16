@@ -20,3 +20,4 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/scimkit /usr/local/bin/scimkit
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/scimkit"]
+CMD ["mock"]

@@ -148,41 +148,46 @@ type, and the hand-written typed views.
 
 #### Tasks (phase 1)
 
-- [ ] Vendor RFC 7643 §8.7 schema JSON under `scim/schemas/` — User, Group,
+- [x] Vendor RFC 7643 §8.7 schema JSON under `scim/schemas/` — User, Group,
       Enterprise User (§8.7.1) and ServiceProviderConfig, ResourceType,
-      Schema meta-schemas (§8.7.2) — one file each, provenance header
-      comment with RFC section + extraction method (Open Questions Q3)
-- [ ] Schema generator (`internal/schemagen`, invoked via `go:generate`):
+      Schema meta-schemas (§8.7.2) — one file each, provenance +
+      extraction method + validation documented in `scim/schemas/README.md`
+      (Open Questions Q3)
+- [x] Schema generator (`internal/schemagen`, invoked via `go:generate`):
       vendored JSON → committed `scim/schema_gen.go` with `Schema` /
-      `Attribute` values; CI drift check regenerates and fails on diff
+      `Attribute` literals (plus hand-written `UserResourceType` /
+      `GroupResourceType`); CI drift check regenerates and fails on diff;
+      round-trip test pins generated values to the vendored fixtures
       (Open Questions Q4)
-- [ ] Metadata types: `AttrType`, `Mutability`, `Returned`, `Uniqueness`,
-      `Attribute`, `Schema`, `ResourceType`, `SchemaExtension`; registry
-      applies RFC 7643 §2.2 defaults so hand-authored schemas stay terse
-- [ ] Case-folded canonical name registry: path → `Attribute` resolution,
+- [x] Metadata types: `AttrType`, `Mutability`, `Returned`, `Uniqueness`,
+      `Attribute`, `Schema`, `ResourceType`, `SchemaExtension`;
+      `Schema.WithDefaults()` applies RFC 7643 §2.2 defaults so
+      hand-authored schemas stay terse; `ParseSchema`/`MarshalJSON`
+      round-trip the /Schemas wire form
+- [x] Case-folded canonical name registry: path → `Attribute` resolution,
       declared-casing emission (wire output never leaks folded names)
-- [ ] URN constants: core/extension schema URNs + `api:messages:2.0:*` URNs
-- [ ] `Error` type + constructors for all RFC 7644 Table 9 scimTypes plus
+- [x] URN constants: core/extension schema URNs + `api:messages:2.0:*` URNs
+- [x] `Error` type + constructors for all RFC 7644 Table 9 scimTypes plus
       `ErrNotFound`/`ErrPreconditionFailed`; wire encode (status as JSON
       string) and decode (accept string or integer status)
-- [ ] `Resource`: presence-tracking container; `Get`/`Set`/`Unassign` in
+- [x] `Resource`: presence-tracking container; `Get`/`Set`/`Unassign` in
       standard attribute notation; `Clone`; automatic `schemas` array
       maintenance; `Meta` accessors; `null`/`[]`/absent equivalence
-- [ ] Value system: SCIM-typed scalars (`dateTime`, `binary`, `reference`
+- [x] Value system: SCIM-typed scalars (`dateTime`, `binary`, `reference`
       distinct from `string`; `integer` vs `decimal`), multi-valued slices,
       complex max-depth-1 enforcement, at-most-one-`primary` helper
-- [ ] JSON codec: unmarshal (case-folded keys, URN extension containers,
+- [x] JSON codec: unmarshal (case-folded keys, URN extension containers,
       silent drop of client-supplied readOnly attrs, schema type checks);
       marshal (declared casing, projection-context parameter, wire
       invariants: capitalized `Resources`/`Operations`, integer pagination
       fields)
-- [ ] ID generation: UUIDv4 via `crypto/rand`; reject reserved `bulkId`
+- [x] ID generation: UUIDv4 via `crypto/rand`; reject reserved `bulkId`
       string (RFC 7643 §3.1)
-- [ ] Typed views + conversions: `User` (full §4.1 surface incl. `Name`,
+- [x] Typed views + conversions: `User` (full §4.1 surface incl. `Name`,
       `MultiValue`, addresses, x509, groups read-only), `Group` (§4.2),
       `EnterpriseUser` + `Manager` (§4.3, attached via `User.Enterprise`);
       `ListResponse`, `Meta`, common message types
-- [ ] Tests: presence-semantics table; codec round-trip properties
+- [x] Tests: presence-semantics table; codec round-trip properties
       (`User` → `Resource` → JSON → `Resource` → `User`; schema → wire →
       schema); fuzz target + seed corpus for the codec; example tests for
       the primary flows
@@ -205,33 +210,41 @@ filter and path grammars — reused by `patch`, `server`, and `client`.
 
 #### Tasks (phase 2)
 
-- [ ] Tokenizer with URN-aware `attrPath` splitting: longest match against
+- [x] Tokenizer with URN-aware `attrPath` splitting: longest match against
       registered schema URNs, last-colon fallback for unknown URNs; accept
       `$ref` (cross-RFC `nameChar` inconsistency)
-- [ ] AST types (`Compare`, `Present`, `And`, `Or`, `Not`, `ValuePath`) +
+      — implemented as pure last-colon splitting: `ATTRNAME` cannot contain
+      `:`, so the split is structurally exact; URN classification against
+      the resource type's declared schemas happens in `Match`, where a
+      `ResourceType` exists (go-architect decision)
+- [x] AST types (`Compare`, `Present`, `And`, `Or`, `Not`, `ValuePath`) +
       `Path`; `String()` renders a re-parseable filter
-- [ ] `Parse`: recursive descent with precedence climbing
+- [x] `Parse`: recursive descent with precedence climbing
       (`not` > `and` > `or`), case-insensitive operators/names, strict JSON
       literal `compValue` (incl. `null`), grouping, valuePath; syntax
       errors → `scim.ErrInvalidFilter` with position detail
-- [ ] `ParsePath`: RFC 7644 Figure 7 grammar
+- [x] `ParsePath`: RFC 7644 Figure 7 grammar
       (`attrPath / valuePath [subAttr]`)
-- [ ] `Lenient` parse option: bare `not` and other documented off-grammar
+- [x] `Lenient` parse option: bare `not` and other documented off-grammar
       IdP shapes — each lenient acceptance covered by a test naming its
-      source
-- [ ] `Match` evaluator: schema-resolved `caseExact` string comparison,
+      source (v0 accepts exactly bare `not`; further shapes require a
+      captured IdP request per the corpus discipline)
+- [x] `Match` evaluator: schema-resolved `caseExact` string comparison,
       chronological `dateTime`, numeric compare, existential multi-valued
       matching, **per-element** valuePath correlation, `pr` on complex
       attributes, ordering ops on boolean/binary → `ErrInvalidFilter`,
       undefined attributes evaluate as no-value (never error)
-- [ ] Builder: `Eq`/`Ne`/`Co`/`Sw`/`Ew`/`Gt`/`Ge`/`Lt`/`Le`/`Pr`/`And`/
+- [x] Builder: `Eq`/`Ne`/`Co`/`Sw`/`Ew`/`Gt`/`Ge`/`Lt`/`Le`/`Pr`/`And`/
       `Or`/`Not`/`HasValue` with correct quoting/escaping
-- [ ] Property tests: builder → `String()` → `Parse` → equal AST;
+      — noted deviation: the AST structs are `AndExpr`/`OrExpr`/`NotExpr`
+      so the builder functions can own the `And`/`Or`/`Not` names the
+      design's usage example shows (Go allows one meaning per identifier)
+- [x] Property tests: builder → `String()` → `Parse` → equal AST;
       `Parse` → `String()` → `Parse` stable
-- [ ] Conformance tests: RFC §3.4.2.2 Figure 2 examples parse to expected
+- [x] Conformance tests: RFC §3.4.2.2 Figure 2 examples parse to expected
       ASTs; Table 3 operator-semantics matrix; observed Okta/Entra filters
       (`userName eq`, `externalId eq`, extension-URN paths)
-- [ ] Fuzz `Parse` + `ParsePath` with seed corpus (RFC examples + IdP
+- [x] Fuzz `Parse` + `ParsePath` with seed corpus (RFC examples + IdP
       shapes + hostile inputs)
 
 #### Success criteria (phase 2)
@@ -253,36 +266,81 @@ simulator input later.
 
 #### Tasks (phase 3)
 
-- [ ] `PatchOp` message decoding: schema URN validation, `Operations`
+- [x] `PatchOp` message decoding: schema URN validation, `Operations`
       required, per-op shape checks → `ErrInvalidSyntax`/`ErrInvalidPath`
-- [ ] Normalization passes, one per `Profile` knob, each independently
+      _(go-architect decisions: Kind string-backed lowercase like
+      filter.Op; Op.Value = decoded-any with json.Number preserved;
+      missing/null add-replace value and remove-with-value →
+      ErrInvalidValue; `{"value": x}` unwrapping is gated by
+      CoerceStringPrimitives — same Entra field report as string
+      coercion — recorded in the design doc)_
+- [x] Normalization passes, one per `Profile` knob, each independently
       unit-tested: case-insensitive ops; string→bool/int/decimal coercion
       per target attribute; pathless-replace expansion (dotted keys +
       full-URN keys); remove-with-value-array as member selector;
       `{"value": x}` unwrapping
-- [ ] `Profile` definitions: `Strict`, `Default`, `Entra`, `Okta` — each
+      _(pass order: op-case folding inline at kind validation →
+      pathless-replace expansion pre-path-parse → selector rewrite →
+      unwrap → string coercion, both schema-directed against rt;
+      unwrapping only fires when the target resolves non-complex, so
+      legitimate `{"value": ...}` sub-attributes survive)_
+- [x] `Profile` definitions: `Strict`, `Default`, `Entra`, `Okta` — each
       knob's doc comment cites the field report that motivates it
-- [ ] `Apply` — add table: pathless merge, missing target creates, complex
+      _(Default = shape tolerance only, never remaps RFC error
+      semantics; Entra = Default + ReplaceNoTargetAsAdd +
+      SynthesizeAddValuePath; Okta = Default — its one deviation,
+      remove-members-by-value, is already shape tolerance; knob sets
+      pinned by TestProfileDefinitions)_
+- [x] `Apply` — add table: pathless merge, missing target creates, complex
       merge, multi-valued append, single-valued replace, **idempotent
       no-change add** (`Changed=false`)
-- [ ] `Apply` — remove table: no path → `ErrNoTarget`; single/multi
+      _(multi-complex dedupe is by "value" sub-attribute identity when
+      the incoming element carries one — an IdP re-adding a group member
+      sends only the id while the stored element carries display/$ref —
+      whole-element equality otherwise; Changed via per-op before/after
+      valuesEqual over the closed stored-form set)_
+- [x] `Apply` — remove table: no path → `ErrNoTarget`; single/multi
       unassign; valuePath-selected removal; required/readOnly →
       `ErrMutability`
-- [ ] `Apply` — replace table: resource-level replace, whole-array replace,
+      _(removing an already-absent value is a Changed=false no-op — the
+      RFC mandates noTarget only for the missing-path case, and IdPs
+      re-send removes; valuePath targeting requires multi-valued
+      complex, matching filter.Match's model)_
+- [x] `Apply` — replace table: resource-level replace, whole-array replace,
       missing-attr → add fallback, complex **partial merge**, valuePath
       replace (all matching), valuePath+subAttr, non-matching valuePath →
-      `ErrNoTarget` (or add under `ReplaceNoTargetAsAdd`)
-- [ ] `SynthesizeAddValuePath`: manufacture element from eq-only
+      `ErrNoTarget` (or add under `ReplaceNoTargetAsAdd`; knob branch
+      lands with the synthesize task)
+- [x] `SynthesizeAddValuePath`: manufacture element from eq-only
       conjunction filters, reject anything else
-- [ ] Cross-cutting apply behavior: sequential ops on working copy
+      _(eligibility is checked at apply time when no element matches —
+      not at decode — so legitimate non-eq valuePath filters that do
+      match keep working; non-seedable filters fall through to the
+      strict noTarget error; ReplaceNoTargetAsAdd shares the same
+      synthesis tail)_
+- [x] Cross-cutting apply behavior: sequential ops on working copy
       (atomicity via `Clone`), `primary` auto-demotion, implicit `schemas`
       maintenance for URN-qualified paths, mutability enforcement
       (immutable add only when unassigned)
-- [ ] Golden IdP corpus: `testdata/idp/{entra,okta,onelogin}/*.json`
+      _(schemas maintenance is free: Apply mutates only through
+      Resource.Set and schemas derives from extension containers; the
+      group-member no-op success criterion is pinned end to end under
+      the Okta profile)_
+- [x] Golden IdP corpus: `testdata/idp/{entra,okta,onelogin}/*.json`
       authored from documented shapes, each fixture carrying a `_source`
       URL field; shared loader package for tests and (later) the simulator
-- [ ] Conformance test file mirroring §3.5.2's structure; fuzz `Decode`
+      _(location deviation: fixtures live at
+      `internal/idpcorpus/testdata/idp/` — go:embed cannot escape the
+      declaring package's directory, and the phase-6 simulator ships in
+      a distroless container needing the corpus compiled in; fixtures
+      assert per-profile cases including the Strict rejection with the
+      RFC-correct scimType)_
+- [x] Conformance test file mirroring §3.5.2's structure; fuzz `Decode`
       with corpus seeds
+      _(FuzzDecode runs every corpus request plus hostile seeds under
+      Strict/Default/Entra against User and Group types: 60s clean,
+      ~2.6M execs; invariants — no panics, all errors *scim.Error,
+      decoded ops structurally valid)_
 
 #### Success criteria (phase 3)
 
@@ -303,49 +361,121 @@ capability fallbacks, query engine, projection, ETags, discovery.
 
 #### Tasks (phase 4)
 
-- [ ] `Config` validation + `New` returning `http.Handler` on Go 1.22
+- [x] `Config` validation + `New` returning `http.Handler` on Go 1.22
       `ServeMux` patterns: per-type CRUD/PATCH/list, `POST /{type}/.search`
       (same query engine as GET), discovery endpoints, `501` for `/Bulk`
       and `/Me`, `403` for filtered discovery queries
-- [ ] Middleware: media-type handling (`application/scim+json`, accept
+      _(`config.go` validates BaseURL/ResourceTypes/MaxFilterResults,
+      defaults DefaultPageSize to 100 and Logger to slog.Default, and
+      rejects duplicate/non-single-segment endpoints; `router.go` wires
+      method patterns per `rt.Endpoint`, catch-all `/` → 404, `/Bulk`
+      and `/Me` → 501; `New(cfg Config)` keeps the by-value public
+      constructor signature from DESIGN-0001, nolint hugeParam)_
+- [x] Middleware: media-type handling (`application/scim+json`, accept
       `application/json`), panic-safe error mapping (`scim.Error` → wire
       body + status), request-scoped `slog` fields
-- [ ] `BearerToken(verifyFn)` helper + configurable auth exemption for
+      _(`middleware.go` chain recover → logging → auth → media-type;
+      `errors.go` maps `*scim.Error` via `errors.As`, anything else →
+      generic 500 so internals never reach the wire; empty-body
+      requests skip the media-type check)_
+- [x] `BearerToken(verifyFn)` helper + configurable auth exemption for
       `/ServiceProviderConfig` (spec SHOULD)
-- [ ] Store wiring: capability sniffing (`Patcher`, `SupportsFilter`) with
+      _(`auth.go` `Auth` interface = Wrap + Scheme; BearerToken parses
+      the scheme case-insensitively, 401 carries a WWW-Authenticate
+      challenge; `Config.ExemptServiceProviderConfig` splits routing so
+      GET /ServiceProviderConfig bypasses the auth wrap)_
+- [x] Store wiring: capability sniffing (`Patcher`, `SupportsFilter`) with
       startup `slog` capability report per resource type
-- [ ] `server/memstore`: case-folded value indexes, native filter
+      _(`typehandler.go` type-asserts both optional interfaces once at
+      `newTypeHandler` and logs nativePatch/filterCapabilityReported per
+      type)_
+- [x] `server/memstore`: case-folded value indexes, native filter
       evaluation via `filter.Match`, `Patcher` with set-semantics members,
       CAS on version — the reference implementation and mock backend
-- [ ] Create/PUT pipeline: schema validation (required, canonicalValues
+      _(go-architect decisions: Store contract documents Replace's
+      conditional-write convention — incoming meta.version is the CAS
+      token, the store bumps on success — and the native Patcher owns
+      its own version/lastModified bump so the design's two-value
+      Patch signature stands; uniqueness-constrained attributes are
+      auto-indexed and enforced with ErrUniqueness; the index narrows
+      candidates but filter.Match always confirms; SortResources is
+      exported so native stores share the §3.4.2.3 comparator)_
+- [x] Create/PUT pipeline: schema validation (required, canonicalValues
       per strictness), §3.5.1 PUT semantics (readOnly retained, immutable
       match-or-`ErrMutability`), uniqueness delegation (`ErrUniqueness` →
       409), id/meta assignment
-- [ ] PATCH endpoint: native `Patcher` path or Get → `patch.Apply` → CAS
+      _(`pipeline.go`: `validateResource` enforces required attrs +
+      required extensions always and canonicalValues only under the
+      strict profile (case-insensitive membership); `mergePut` retains
+      readOnly from current, immutable is match-or-`ErrMutability` and
+      an omitted immutable is retained; create stamps a new id + full
+      meta, PUT carries the current version as the store's CAS token)_
+- [x] PATCH endpoint: native `Patcher` path or Get → `patch.Apply` → CAS
       Replace fallback with bounded retry; always `200` + full body (the
       Okta-safe default); `Changed=false` skips version/lastModified bump
-- [ ] Query engine: filter push-down with scan-and-`Match` fallback capped
+      _(`handler_patch.go`: `patchNative` delegates to the Patcher and
+      checks If-Match best-effort; `patchFallback` runs under the stripe
+      lock with a 3-round CAS retry on `ErrPreconditionFailed`, checking
+      If-Match once against the first read; `!Changed` returns the
+      current resource untouched)_
+- [x] Query engine: filter push-down with scan-and-`Match` fallback capped
       by `MaxFilterResults` → `ErrTooMany`; sorting (primary-first value,
       missing-last ascending, type-aware compare, `caseExact`); pagination
       (`startIndex<1`→1, negative count→0, `count=0` returns totals only)
-- [ ] Projection stage on **all** responses (GET and write responses):
+      _(`engine.go` pushes the filter down when the store supports it,
+      else lists unfiltered capped at MaxFilterResults+1 → `ErrTooMany`,
+      matches with `filter.Match`, sorts with `SortResources`, and
+      paginates; `query.go` normalizes GET params and the /.search body
+      into one `Query`; whoever filters sorts, so ordering happens once)_
+- [x] Projection stage on **all** responses (GET and write responses):
       `attributes`/`excludedAttributes` mutual exclusion, minimum set
       (`id`, `schemas`, `returned=always`), `returned=never` strip
-- [ ] ETags: weak ETag from canonical-JSON hash unless store supplies
+      _(`typehandler.go` `requestProjection` + `query.go`
+      `parseProjection` reject combining the two lists with
+      `invalidValue`; the projection is applied by `scim.EncodeResource`
+      on every CRUD, PATCH, and list response — its §3.4.2.5 rules own
+      the minimum set and `returned` handling)_
+- [x] ETags: weak ETag from canonical-JSON hash unless store supplies
       `meta.version`; `If-Match` → 412 on mismatch; `If-None-Match` → 304;
       `meta.version` mirrors the header
-- [ ] Concurrency: striped per-resource-id locks around the
+      _(`etag.go`: `resourceETag` prefers store meta.version else a weak
+      SHA-256 tag of the canonical unprojected JSON; `stampETag` mirrors
+      it into meta.version before encoding; RFC 7232 weak comparison with
+      `*` support; `If-None-Match` handled on GET only → 304)_
+- [x] Concurrency: striped per-resource-id locks around the
       read-modify-write fallback
-- [ ] Discovery generation from wiring: SPC capability flags reflect
+      _(`locks.go`: 32 fnv32a stripes keyed on endpoint+"/"+id, held
+      around the PATCH fallback and the PUT read-modify-write only; the
+      native Patcher path owns its own store lock)_
+- [x] Discovery generation from wiring: SPC capability flags reflect
       actual config (patch/filter+maxResults/sort/etag true; bulk/
       changePassword false), `/ResourceTypes` + `/Schemas` from registered
       types, `authenticationSchemes` from configured auth
-- [ ] Integration tests over `httptest`: full user + group lifecycles;
+      _(`discovery.go` pre-marshals all three documents at `New`;
+      SPC flags are derived from the config (filter.maxResults =
+      MaxFilterResults, authenticationSchemes from `Auth.Scheme`); schemas
+      are deduplicated by URN across types + extensions; filtered
+      discovery queries → 403)_
+- [x] Integration tests over `httptest`: full user + group lifecycles;
       golden Entra/Okta traffic replayed through HTTP under `Default` and
       rejected appropriately under `Strict`; concurrent same-group PATCH
       storm under `-race`
-- [ ] Conformance tests: Table 8 status mapping + Table 9 error bodies;
+      _(`handler_test.go` lifecycles; `corpus_test.go` replays all 18
+      idpcorpus cases over HTTP incl. every Strict rejection;
+      `concurrency_test.go` + `toystore_test.go` storm the native and
+      striped-lock fallback paths, both race-clean)_
+- [x] Conformance tests: Table 8 status mapping + Table 9 error bodies;
       discovery documents validate against the vendored meta-schemas
+      _(`conformance_test.go` asserts status + scimType + Error schema
+      URN across endpoints; `discovery_test.go` decodes SPC and
+      ResourceType docs against the §8.7.2 meta-schemas — the Schema doc
+      is validated structurally because its `attributes.subAttributes`
+      nesting is the RFC §2.3.1 exception the decoder rightly forbids for
+      ordinary resources)_
+      _(surfaced + fixed a Phase-1 vendoring bug: `resource-type.json`
+      had `schemaExtensions` as `multiValued:false`; RFC 7643 §8.7.2
+      defines it `true` — corrected the source JSON and regenerated
+      `schema_gen.go`)_
 
 #### Success criteria (phase 4)
 
@@ -364,28 +494,69 @@ The generic typed provisioner client.
 
 #### Tasks (phase 5)
 
-- [ ] Transport core: base-URL joining, SCIM headers, context plumbing,
+- [x] Transport core: base-URL joining, SCIM headers, context plumbing,
       error-body decode to `scim.Error` (string or int `status`)
-- [ ] Retry policy: 429 honoring `Retry-After` (seconds and HTTP-date),
+      _(`client.go`/`transport.go`: `New` validates an absolute base URL;
+      `requestURL` builds every URL with `url.JoinPath` so ids escape
+      correctly; `do` rebuilds a fresh request per attempt from an
+      immutable body (no GetBody needed); `decodeError` maps any non-2xx
+      body to a `*scim.Error`, synthesizing one for non-SCIM bodies)_
+- [x] Retry policy: 429 honoring `Retry-After` (seconds and HTTP-date),
       doubling backoff with jitter and `MaxAttempts` cap (Okta's
       protocol); configurable 5xx retry; request context deadlines
       respected
-- [ ] Generic `Resources(name)` service: Create/Get/Replace/Patch/Delete
+      _(`retry.go`: `RetryConfig` pure data + `DefaultRetryConfig`
+      (Okta's 10-attempt protocol); `backoffDelay` capped exponential
+      with partial jitter via `math/rand/v2`; `parseRetryAfter` handles
+      delta-seconds and HTTP-date; Retry-After overrides the computed
+      delay; the `sleeper` seam aborts on context cancellation and makes
+      retry tests sleepless; exhaustion → typed `RetryExhaustedError`)_
+- [x] Generic `Resources(name)` service: Create/Get/Replace/Patch/Delete
       returning `*scim.Resource`
-- [ ] Typed `Users()` / `Groups()` wrappers over the generic service
-- [ ] `List`: `iter.Seq2[T, error]` with transparent pagination,
+      _(`resources.go`: type resolved lazily from discovery and cached on
+      the Client; empty PATCH/PUT response bodies are filled with a
+      follow-up Get so callers always get the full resource)_
+- [x] Typed `Users()` / `Groups()` wrappers over the generic service
+      _(`users.go`/`groups.go` embed `*ResourceService` built from the
+      library's own User/Group schemas — no discovery round trip)_
+- [x] `List`: `iter.Seq2[T, error]` with transparent pagination,
       duplicate/gap tolerance (non-snapshot semantics), `Query` mapping to
       params; opt-in `POST /.search` transport for PII-bearing filters
-- [ ] Provisioner helpers: `Lookup` (0-or-1 from filter), `EnsureMember` /
+      _(`query.go`: pagination advances by items received not requested,
+      terminates on short/empty page OR reaching TotalResults, yields an
+      error once then stops; `WithSearchTransport` / `Query.Search` route
+      through POST /.search)_
+- [x] Provisioner helpers: `Lookup` (0-or-1 from filter), `EnsureMember` /
       `RemoveMember` (spec-shaped valuePath PATCHes, already-present/absent
       = success), `Deactivate` (`active:false`)
-- [ ] `Capabilities()`: fetch/parse/cache SPC; PATCH→PUT write fallback
+      _(`Lookup` uses Count:2 to detect ambiguity → `ErrAmbiguousLookup`,
+      empty result is nil-not-error; membership helpers are sugar over
+      `Patch` (so fallback/retry/error-typing apply uniformly); set
+      semantics come from the patch engine's value-identity dedupe;
+      `RemoveMember` also tolerates a wrong `noTarget` from the target)_
+- [x] `Capabilities()`: fetch/parse/cache SPC; PATCH→PUT write fallback
       when the target advertises `patch.supported=false` (or returns 501)
-- [ ] ETag support: `If-Match` on writes when etags advertised; 412 as
+      _(`capabilities.go`: mutex+field cache (not sync.Once, so a
+      transient failure is not cached) + `InvalidateCapabilities`;
+      `Patch` consults `PatchSupported` and also falls back on a live
+      501; the fallback is Get → `patch.Apply` (Strict) → Replace with
+      the fetched version as the CAS token)_
+- [x] ETag support: `If-Match` on writes when etags advertised; 412 as
       typed conflict error
-- [ ] Integration tests against `server`+`memstore` over `httptest`; retry
+      _(`Replace` sends `If-Match` opportunistically whenever the
+      resource carries a `meta.version` — strictly safer than gating on
+      the advertised flag; 412 surfaces as `*ConflictError` unwrapping to
+      the `*scim.Error`)_
+- [x] Integration tests against `server`+`memstore` over `httptest`; retry
       behavior against a scripted flaky handler (429 sequences, Retry-After
       variants, deadline expiry)
+      _(`client_test.go`/`services_test.go`/`fallback_test.go`/
+      `discovery_test.go`/`options_test.go` integration; `retry_test.go`
+      scripted flaky handler with a fake clock asserting exact attempt
+      counts, per-retry sleeps, Retry-After honoring, exhaustion typing,
+      and clean context-cancellation abort; 83.4% coverage)_
+      _(prerequisite `patch.EncodeOps` added — go-architect decision B —
+      renders `[]patch.Op` to a strict PatchOp wire body)_
 
 #### Success criteria (phase 5)
 
@@ -404,38 +575,147 @@ The testing story and the shippable artifact.
 
 #### Tasks (phase 6)
 
-- [ ] `scimtest.NewServer(t, opts...)`: resource-type/seed/profile/token
+- [x] `scimtest.NewServer(t, opts...)`: resource-type/seed/profile/token
       options, `httptest` lifecycle with `t.Cleanup`, `URL`/`Client()`/
       `Store()` accessors, request **Recorder** for asserting what a
       provisioner sent
-- [ ] Seed format (JSON users/groups) + loader shared by
+      _(go-architect decision: split into `NewMock(opts...)` (no test
+      dependency, drives both go test and the CLI) and `NewServer(tb,
+      opts...)` wrapping it with an `httptest.Server` + `t.Cleanup`.
+      `Server` embeds `*Mock`, promoting `Handler`/`Store`/`Recorder`.
+      The base-URL chicken-and-egg — the handler bakes `meta.location`
+      but the httptest port is unknown until it starts — is solved by a
+      `lazyHandler` (`atomic.Pointer[http.Handler]`, race-clean) served
+      first, then swapped for the real handler once the URL is known.
+      `Store(name)` returns `server.Store` keyed by folded type name;
+      assert `server.Patcher` for native PATCH. Deviation from the
+      DESIGN-0001 sketch: dropped the speculative no-op `Mock.Close()` —
+      it freed nothing and only tripped errcheck; httptest/CLI own the
+      closable resources. Default profile is `patch.Strict`, the scimtest
+      posture; `ExemptServiceProviderConfig` is on so capability
+      discovery works before a token is held)_
+- [x] Seed format (JSON users/groups) + loader shared by
       `scimtest.WithSeed` and the CLI `--seed` flag
-- [ ] Scenario engine: step model with request templates, variable
+      _(`Seed{Users,Groups []json.RawMessage}` — each entry a bare SCIM
+      body, no envelope. `DecodeSeed(io.Reader)`/`LoadSeedFile(path)` are
+      the one shared decode path; `WithSeed(Seed)` and `WithSeedJSON([]byte)`
+      accumulate. Deviation from the DESIGN-0001 `WithSeed(users, groups)`
+      sketch: collapsed to one `Seed` value so the CLI file loader and the
+      test option share it. Load-bearing decision: seeding replays each
+      entry through the real create pipeline via
+      `httptest.NewRequestWithContext` + `handler.ServeHTTP` against the
+      bare handler before the recorder wraps it — so seeded resources get
+      identical id/meta/validation and setup traffic never pollutes the
+      Recorder. A malformed doc or pipeline-rejected resource fails
+      NewMock)_
+- [x] Scenario engine: step model with request templates, variable
       capture/substitution (created IDs), per-step expectations; payloads
       sourced from the phase-3 golden corpus (Open Questions Q5)
-- [ ] Scenario catalog: `rfc-strict-lifecycle`, `entra-user-lifecycle`,
+      _(`Scenario`→`Step`→`Expectation`/`Capture`/`BodyAssertion` (fields
+      mirror `idpcorpus.PathAssertion`). Path/Body carry `text/template`
+      actions resolved against captured vars with `missingkey=error`, so a
+      broken capture chain fails loudly rather than sending an empty
+      segment; corpus bodies have no actions, so substitution is a no-op
+      for them. `applyCaptures` binds response values as string vars.
+      `evaluate` returns one message per failure (status, scimType,
+      headers, body). The load-bearing piece is `lookupPath`: a
+      greedy-longest-match resolver — extension-URN keys contain literal
+      dots (`2.0`), so it matches the longest run of dot-tokens against a
+      real map key with backtracking before falling to shorter runs, and
+      indexes arrays by numeric token. Unassigned honors SCIM's
+      null/[]/absent equivalence; value equality coerces int↔float64.
+      Engine is pure functions, unit-tested without a live server)_
+- [x] Scenario catalog: `rfc-strict-lifecycle`, `entra-user-lifecycle`,
       `entra-group-membership` (one-member-per-PATCH storm),
       `okta-user-lifecycle` (lookup→create→PUT), `okta-group-put`,
       `onelogin-lookup-dance`
-- [ ] `Simulate(ctx, target, token, scenario)` + report model with JSON
+      _(go-architect Q5 decision: Go builders for flow/capture/assertions,
+      JSON payloads pulled from the existing `internal/idpcorpus` embed —
+      no new DSL, no new embed. Scenario identity is a string constant
+      resolved via `LookupScenario(name)` (deviation from the DESIGN-0001
+      typed-value sketch, so `Simulate` takes a built `Scenario` and stays
+      reusable for hand-authored ones); `ScenarioNames()` is the fixed
+      6-entry list. A `scenarioBuilder` defers the first corpus-miss error
+      to `build`, which also runs `validateScenario` (every step needs a
+      method + non-zero status — a malformed scenario is a build error,
+      never a silent step failure). Each IdP scenario embeds that
+      provider's real PatchOp bytes and encodes the success expectation, so
+      it passes against a matching-profile target and fails with a diff
+      otherwise. okta-group-put deliberately makes the destructive
+      members-less PUT visible; onelogin-lookup-dance reproduces
+      duplicate-group creation. Expectations validated end-to-end by the
+      Task-5 self-check runs)_
+- [x] `Simulate(ctx, target, token, scenario)` + report model with JSON
       and human-readable renderers
-- [ ] CLI (stdlib `flag`, subcommand dispatch): `mock` (`--addr`,
+      _(go-architect decision C: raw `net/http` single-shot transport, not
+      the client package — scenarios must send shapes `patch.EncodeOps`
+      can't produce and assert on exact status/scimType/headers the client
+      collapses. Fail-fast: the first failing step aborts (later steps
+      reference its captures), setting `Aborted`/`AbortedAt`; `Passed` is
+      true only when every step passed. `Report.JSON()` and `.Text()`
+      (aligned PASS/FAIL table + failure detail) render both ways;
+      `RecordedIO.Body` is normalized to valid-JSON-or-nil so the report
+      always marshals. Validated end-to-end: `TestSimulateCatalog` runs all
+      6 scenarios against matching-profile mocks (all pass), and
+      `TestSimulateSelfCheck` proves a healthy mock passes
+      rfc-strict-lifecycle while a wrong-token config fails it — the CI
+      self-check contract. scimtest coverage 88.2%)_
+- [x] CLI (stdlib `flag`, subcommand dispatch): `mock` (`--addr`,
       `--seed`, `--profile`, `--latency`, `--fail-rate`), `exercise`
       (`--target`, `--token`, `--scenario`, `--report`), `version`; slog
       default handler, SIGTERM graceful shutdown
-- [ ] Chaos middleware for the mock: injected latency + failure rate (for
+      _(`cmd/scimkit/{main,mock,exercise,usage}.go`: `run(ctx, args,
+      stdout)` dispatches so tests capture output; logs go to stderr and
+      stdout is reserved for the report; `exercise` exits non-zero via a
+      sentinel error when the scenario fails. `mock` adds `--token` beyond
+      the sketch and defaults to the strict profile;
+      `scimtest.ParseProfileName` maps the flag so the CLI never imports
+      `patch`. The image's default command is `mock`)_
+- [x] Chaos middleware for the mock: injected latency + failure rate (for
       consumer retry testing)
-- [ ] CI self-check: `exercise` running `rfc-strict-lifecycle` against
+      _(`ChaosConfig{Latency, FailRate, FailStatus, Rand}` + `WithChaos`.
+      Lives in scimtest so both the CLI mock and go-test mock opt in the
+      same way. Injected failure defaults to 503 (the client's
+      default-retryable code) with a SCIM error body. Determinism: a
+      caller-supplied `*math/rand/v2.Rand` is guarded by a mutex (a bare
+      `rand.New` is not concurrency-safe) so seeded chaos is both
+      reproducible and race-clean under concurrent storms; nil uses the
+      auto-seeded, concurrency-safe package source. Latency injection
+      selects on `time.After` vs `r.Context().Done()` so a cancelled
+      request never blocks a goroutine. Composition: chaos sits between the
+      recorder (outermost) and the SCIM handler, so failures are recorded
+      and seeding — through the bare handler — is unaffected)_
+- [x] CI self-check: `exercise` running `rfc-strict-lifecycle` against
       `scimtest.NewServer` (the simulator validates the mock, the mock
       validates the simulator)
-- [ ] Container smoke test in CI: build via `docker buildx bake`, run the
+      _(two layers: `cmd/scimkit/main_test.go` runs it in-process against
+      `scimtest.NewServer`, and `scripts/self-check.sh` (`just
+      self-check`, CI job "Simulator Self-Check") runs the built binary
+      over TCP — a healthy mock passes, a wrong-token mock must fail, then
+      the Okta-shaped HTTP flow in `scripts/smoke-http.sh` runs)_
+- [x] Container smoke test in CI: build via `docker buildx bake`, run the
       image, drive an Okta-shaped create/lookup/patch flow against it
-- [ ] README: replace placeholder snippets with real quickstarts (server,
+      _(CI job "Container Smoke": bakes `scimkit-ci`, runs it with
+      `--profile okta --token`, drives `scripts/smoke-http.sh` (SPC →
+      userName-eq lookup → create → lookup → PATCH active=false → delete),
+      then runs `exercise --scenario okta-user-lifecycle` from the same
+      image. Surfaced that `release.yml` never published the image the
+      bake file was written for — added its "Publish Image" job using
+      metadata-action's bake-file tag override)_
+- [x] README: replace placeholder snippets with real quickstarts (server,
       client, `go test` mock, docker mock, exercise) backed by `Example`
       tests
-- [ ] Final pre-tag API review: godoc read-through of every package,
+      _(`server/example_test.go`, `client/example_test.go`,
+      `scimtest/example_test.go` carry `// Output:` examples; the README
+      snippets are trimmed copies of them)_
+- [x] Final pre-tag API review: godoc read-through of every package,
       resolve TODOs, verify DESIGN-0001 sketches match reality (update the
       design doc where they deliberately don't)
+      _(no TODOs in tree; package docs accurate against `go doc -all`;
+      DESIGN-0001 sketches updated to the shipped names — filter
+      `ParseOption`/AST names, `patch.EncodeOps`, the Store CAS contract,
+      the `client` resource-based services, the `scimtest` option set and
+      `Simulate` signature, the CLI flags, the corpus path)_
 - [ ] Ship it: final PR labeled `minor` → **v0.1.0** tag, archives, image
 
 #### Success criteria (phase 6)
@@ -505,16 +785,16 @@ Key files by phase (all Create unless noted):
 
 Per DESIGN-0001's Testing Strategy; tracked here as cross-phase work:
 
-- [ ] Table-driven unit tests per package, race detector always on
-- [ ] RFC conformance test files (PATCH §3.5.2, filter Table 3, error
+- [x] Table-driven unit tests per package, race detector always on
+- [x] RFC conformance test files (PATCH §3.5.2, filter Table 3, error
       Tables 8/9, projection rules) mirroring spec structure
-- [ ] Golden IdP corpus asserted under every Profile (phase 3 onward)
-- [ ] Fuzz targets + committed corpora: codec (phase 1), filter
+- [x] Golden IdP corpus asserted under every Profile (phase 3 onward)
+- [x] Fuzz targets + committed corpora: codec (phase 1), filter
       parse/path (phase 2), patch decode (phase 3)
-- [ ] Round-trip property tests: schema↔wire, typed↔Resource↔JSON
-- [ ] client↔server httptest integration (phase 5); simulator↔mock
+- [x] Round-trip property tests: schema↔wire, typed↔Resource↔JSON
+- [x] client↔server httptest integration (phase 5); simulator↔mock
       self-check and container smoke test (phase 6)
-- [ ] Coverage enforcement per Open Questions Q6
+- [x] Coverage enforcement per Open Questions Q6
 
 ## Dependencies
 
@@ -573,7 +853,7 @@ DESIGN-0001 Q8 allows test-only deps, naming "go-cmp and/or testify":
 **Decision: a, with a standing amendment: tests are table-driven,
 always.** Table-driven structure is the house style and is independent of
 the assertion library — testify (and go-cmp for deep diffs) are used
-*inside* table cases where they fit, and where they don't, the test is
+_inside_ table cases where they fit, and where they don't, the test is
 still written as a table with plain stdlib assertions. This is recorded in
 [Conventions for every phase PR](#conventions-for-every-phase-pr).
 
@@ -595,7 +875,7 @@ still written as a table with plain stdlib assertions. This is recorded in
 
 **Decision: a, staged.** Phase 1 lands hand-extracted, hand-validated
 JSON (careful review against the RFC text, provenance headers). The
-*automated* assurance layer — checksum pinning, or a verification/
+_automated_ assurance layer — checksum pinning, or a verification/
 extraction tool — is explicitly deferred; how to guarantee fidelity
 long-term is revisited in phase 7 alongside the other deferred decisions.
 

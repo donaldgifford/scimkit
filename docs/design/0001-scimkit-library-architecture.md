@@ -135,7 +135,7 @@ These RFC realities drive the design below (citations in [References](#reference
    is ambiguous — URNs contain colons and dots
    (`…enterprise:2.0:User:manager.displayName`). Filters, PATCH paths,
    `attributes`/`excludedAttributes`, and `sortBy` must share one tokenizer
-   that prefers longest-registered-URN match with a last-colon fallback.
+   that splits URN prefix from attribute name without guessing.
 4. **PATCH is a decision table, not a verb.** §3.5.2's add/remove/replace
    tables (add-on-single-valued replaces; no-op adds must not bump
    `meta.version`; replace-on-missing becomes add; replace-with-non-matching
@@ -177,7 +177,7 @@ github.com/donaldgifford/scimkit/
 ├── client/          # generic typed SCIM client for provisioners
 ├── scimtest/        # embeddable mock server + IdP traffic simulator for go test
 ├── cmd/scimkit/     # CLI: mock server + simulator subcommands (the Docker image)
-├── internal/        # non-exported helpers (case folding tables, json utils)
+├── internal/        # idpcorpus (embedded golden IdP corpus + loader), schemagen
 └── docs/            # docz-managed documentation (this file)
 ```
 
@@ -185,13 +185,19 @@ Dependency direction is strictly one-way:
 
 ```text
 scim  ←  filter  ←  patch  ←  server  ←  scimtest  ←  cmd/scimkit
-   ↖────  client  ─────────────────────↗
+   ↖────  patch  ←  client  ────────────↗
 ```
 
-`scim` imports only the stdlib. `client` needs `scim` + `filter` (builder)
-only. Nothing imports `server` except `scimtest` and `cmd`. This keeps each
-primitive independently consumable (Goal 1) and makes an eventual mock
-spin-off a clean cut along the `scimtest`/`cmd` seam.
+`scim` imports no third-party modules — only the stdlib (repo-internal
+helpers under `internal/`, like the schema generator, are fine; the
+constraint is on the dependency graph, not the module layout). `client`
+needs `scim` + `filter` (builder) + `patch` — the `patch` edge is real:
+`client.Patch(ctx, id, ops []patch.Op)` takes `patch.Op`, and the client
+renders ops to the wire with `patch.EncodeOps` (IMPL-0001 phase 5,
+go-architect decision B). It does **not** import `server`. Nothing
+imports `server` except `scimtest` and `cmd`. This keeps each primitive
+independently consumable (Goal 1) and makes an eventual mock spin-off a
+clean cut along the `scimtest`/`cmd` seam.
 
 ### Core resource model (`scim`)
 
@@ -291,7 +297,8 @@ generated, never duplicated (constraint 7).
 **JSON codec** (in `scim`, not `encoding/json` tags): unmarshalling folds
 case, treats top-level URN keys as extension containers, silently drops
 client-supplied `readOnly` attributes (`meta`, `id` per §3.1) rather than
-erroring, and coerces types per the active compat profile. Marshalling emits
+erroring, and type-checks values against the schema (compat coercion is the
+`patch` package's job — `scim` knows nothing about Profiles). Marshalling emits
 declared casing and applies a projection context (attributes/excluded +
 `returned` rules) supplied by the caller.
 
@@ -318,12 +325,14 @@ back into it (accepting string *or* integer `status`), so
 ### `filter` — parse, evaluate, build
 
 ```go
-func Parse(s string) (Expr, error)         // full RFC 7644 §3.4.2.2 grammar
-func ParsePath(s string) (Path, error)     // PATCH path grammar (Figure 7)
+func Parse(s string, opts ...ParseOption) (Expr, error)     // full RFC 7644 §3.4.2.2 grammar
+func ParsePath(s string, opts ...ParseOption) (Path, error) // PATCH path grammar (Figure 7)
 
 type Expr interface{ isExpr() }
 // Implementations: Compare{Path, Op, Value}, Present{Path},
-// And{L, R}, Or{L, R}, Not{E}, ValuePath{Path, Filter}
+// AndExpr{L, R}, OrExpr{L, R}, NotExpr{E}, ValuePath{Path, Filter}
+// (the AST structs carry the Expr suffix so the builder functions below
+// can own the bare And/Or/Not names)
 
 type Path struct {
     URN       string // "" for core-schema paths
@@ -337,8 +346,10 @@ type Path struct {
   (`not` > `and` > `or`); the RFC's ABNF alone is ambiguous, precedence comes
   from §3.4.2.2 prose.
 - The URN-aware tokenizer (constraint 3) lives here and is reused by `patch`,
-  `server` (attributes/sortBy params), and `client`. Longest match against
-  registered schema URNs, last-colon fallback for unknown URNs.
+  `server` (attributes/sortBy params), and `client`. It splits at the last
+  colon — `ATTRNAME` cannot contain `:`, so the split is structurally exact
+  with no URN registry needed; URN classification against the resource
+  type's declared schemas happens in `Match`, where a `ResourceType` exists.
 - Operators and attribute names fold case; `compValue` is a strict JSON
   literal; a `Lenient` parse option accepts the bare-`not` and other
   off-grammar shapes some IdPs emit.
@@ -367,7 +378,10 @@ Two stages, deliberately separated:
 //   - string booleans/numbers coerced per target attribute type ("False" → false)
 //   - pathless replace with flattened dotted keys and URN keys expanded
 //   - remove with op-level value array treated as a member selector
-//   - {"value": x} object unwrapping
+//   - {"value": x} object unwrapping (gated by CoerceStringPrimitives —
+//     the same Entra field report motivates both: Entra wraps simple
+//     add/replace values as {"value": "False"} objects, then needs the
+//     inner string coerced; unwrapping runs before coercion)
 func Decode(body []byte, rt *scim.ResourceType, p Profile) ([]Op, error)
 
 type Op struct {
@@ -385,6 +399,10 @@ type Result struct {
     Resource *scim.Resource
     Changed  bool
 }
+
+// EncodeOps is the inverse of Decode for the client direction: it renders
+// ops as a strict PatchOp wire body.
+func EncodeOps(ops []Op) ([]byte, error)
 ```
 
 `Apply` implements the full §3.5.2 decision tables: add-merges, add-on-
@@ -427,7 +445,7 @@ srv, err := server.New(server.Config{
         {Type: scim.GroupResourceType(), Store: groupStore},
     },
     Profile:        patch.Default,
-    Auth:           server.BearerToken(verifyFn), // middleware seam; nil = bring your own
+    Auth:           server.BearerToken(verifyFn), // server.Auth (Wrap + Scheme); nil = bring your own
     MaxFilterResults: 200,                        // → SPC filter.maxResults, tooMany
 })
 mux.Handle("/scim/v2/", http.StripPrefix("/scim/v2", srv))
@@ -465,6 +483,11 @@ type Page struct {
     Resources    []*scim.Resource
     TotalResults int
 }
+
+// Version contract: a store that tracks versions treats the incoming
+// resource's meta.version on Replace as the compare-and-swap token
+// (mismatch → ErrPreconditionFailed) and bumps the version itself on
+// success. A store that ignores meta.version gets content-hashed ETags.
 
 // Optional capabilities:
 type Patcher interface { // O(delta) native patch — REQUIRED for group scale
@@ -510,12 +533,15 @@ c, err := client.New("https://target.example.com/scim/v2",
     }),
 )
 
-// Typed sugar over a generic core:
-u, err := c.Users().Create(ctx, user)
+// Schema-bound sugar over a generic core. Users()/Groups() are
+// ResourceServices pre-bound to the built-in schemas (no discovery round
+// trip); they exchange *scim.Resource, and scim.UserFromResource /
+// (*scim.User).Resource() bridge to the typed views.
+u, err := c.Users().Create(ctx, res)
 u, err = c.Users().Lookup(ctx, filter.Eq("userName", "bjensen")) // 0-or-1 helper
 for u, err := range c.Users().List(ctx, client.Query{Filter: f}) { … } // iter.Seq2,
                                                                        // transparent pagination
-err = c.Users().Patch(ctx, id, ops)      // with PUT fallback if 501 (configurable)
+u, err = c.Users().Patch(ctx, id, ops)   // with PUT fallback if 501 (configurable)
 res, err := c.Resources("Device").Get(ctx, id) // custom resource types → *scim.Resource
 
 caps, err := c.Capabilities(ctx) // parsed ServiceProviderConfig, cached
@@ -541,24 +567,29 @@ provisioner reimplements:
 **`scimtest`** (importable, `go test`-first):
 
 ```go
-ts := scimtest.NewServer(t,
-    scimtest.WithResourceTypes(scim.UserResourceType(), scim.GroupResourceType()),
-    scimtest.WithSeed(users, groups),
-    scimtest.WithProfile(patch.Strict), // strict by default: tests should catch sloppiness
+ts := scimtest.NewServer(t,                // User + Group registered by default
+    scimtest.WithSeed(seed),               // scimtest.Seed: bare User/Group bodies
+    scimtest.WithProfile(patch.Strict),    // strict by default: tests should catch sloppiness
+    scimtest.WithBearerToken("t"),
 )
-defer ts.Close()
-// ts.URL, ts.Client() — point your provisioner at it, assert on ts.Store() after
+// torn down via t.Cleanup — no Close()
+// ts.URL(), ts.Client() — point your provisioner at it; then assert on
+// ts.Store("User") or on ts.Recorder() (every request the mock received)
 ```
 
-Backed by the real `server` package + the in-memory store — the mock *is*
-the library, so mock behavior and library behavior can't drift.
+`NewServer` wraps `NewMock(opts...)`, which has no test dependency: the same
+`Mock` (handler + stores + recorder) backs both `go test` and the CLI's
+`mock` subcommand. Backed by the real `server` package + the in-memory
+store — the mock *is* the library, so mock behavior and library behavior
+can't drift.
 
 **IdP traffic simulator** — the piece nothing in any ecosystem provides: a
 scenario runner that replays golden request shapes (including the
 non-compliant ones) against a target SCIM server and produces a report:
 
 ```go
-report := scimtest.Simulate(ctx, targetURL, token, scimtest.ScenarioEntraUserLifecycle)
+sc, _ := scimtest.LookupScenario(scimtest.ScenarioEntraUserLifecycle)
+report, err := scimtest.Simulate(ctx, targetURL, token, sc) // report.Passed, .Text(), .JSON()
 // scenarios: Entra (capitalized ops, string bools, pathless replace, one-member-
 // per-PATCH storms), Okta (userName-eq lookup→create, PUT full replace,
 // deactivate-not-delete), OneLogin (lookup dance, duplicate group creates), RFC-strict.
@@ -569,8 +600,9 @@ build/goreleaser/docker plumbing intact — Open Questions Q7):
 
 ```text
 scimkit mock      --addr :8080 --seed seed.json --profile strict|default|entra|okta
-                  --latency 50ms --fail-rate 0.01        # chaos knobs for retry testing
+                  --token T --latency 50ms --fail-rate 0.01  # chaos knobs for retry testing
 scimkit exercise  --target URL --token T --scenario entra-user-lifecycle --report json
+                  --timeout 30s
 scimkit version
 ```
 
@@ -587,11 +619,11 @@ All new surface — summarized here for review; sketches above are normative:
 | Package | Key exports |
 |---|---|
 | `scim` | `Resource`, `User`/`Group`/`EnterpriseUser` + conversions, `Schema`/`Attribute`/`ResourceType` + built-ins, `Error` + constructors, URN constants, `Meta`, `MultiValue`, `ListResponse` |
-| `filter` | `Parse`, `ParsePath`, `Expr` AST, `Match`, builder (`Eq`, `And`, `Not`, …) |
-| `patch` | `Decode`, `Apply`, `Op`, `Result`, `Profile` (`Strict`/`Default`/`Entra`/`Okta`) |
-| `server` | `New`, `Config`, `Registration`, `Store`, `Patcher`, `Query`, `Page`, `BearerToken`, `memstore.New` (in-memory reference store) |
-| `client` | `New`, options, `Users()`/`Groups()`/`Resources()`, `Query`, `Capabilities`, retry config |
-| `scimtest` | `NewServer`, options, `Simulate`, scenario catalog |
+| `filter` | `Parse`, `ParsePath`, `Lenient`, `Expr` AST (`Compare`, `Present`, `AndExpr`, `OrExpr`, `NotExpr`, `ValuePath`), `Path`, `Match`, builder (`Eq`, `And`, `Not`, `HasValue`, …) |
+| `patch` | `Decode`, `Apply`, `EncodeOps`, `Op`, `Result`, `Profile` (`Strict`/`Default`/`Entra`/`Okta`) |
+| `server` | `New`, `Config`, `Registration`, `Store`, `Patcher`, `FilterUnsupported`, `Query`, `Page`, `Auth`/`AuthScheme`, `BearerToken`, `SortResources`, `memstore.New` (+ `WithIndex`/`WithProfile`, in-memory reference store) |
+| `client` | `New`, options, `Users()`/`Groups()`/`Resources()`, `Query`, `Capabilities`, `RetryConfig`, typed errors (`ConflictError`, `RetryExhaustedError`, `ErrAmbiguousLookup`) |
+| `scimtest` | `NewServer`/`NewMock`, options (`WithSeed`, `WithProfile`, `WithBearerToken`, `WithChaos`, …), `Recorder`, `Seed` + loaders, `Simulate`, `Report`, `Scenario` + `LookupScenario` catalog, `ParseProfileName` |
 | `cmd/scimkit` | `mock`, `exercise`, `version` subcommands (flag-based, stdlib `flag`) |
 
 Pre-1.0 compatibility policy: minor versions may break the API (standard Go
@@ -629,7 +661,8 @@ string.
 
 - **Table-driven unit tests** per package (repo convention), race detector on
   (`just test`).
-- **Golden IdP corpus**: `testdata/idp/{entra,okta,onelogin}/*.json` —
+- **Golden IdP corpus**: `internal/idpcorpus/testdata/idp/{entra,okta,onelogin}/*.json`
+  (embedded via `go:embed` so the simulator ships with it in the image) —
   captured real-world request shapes (capitalized ops, string booleans,
   pathless replaces, member-removal variants) asserted through
   `patch.Decode`/`Apply` under each Profile. This corpus doubles as the

@@ -37,7 +37,7 @@ COVERAGE_OUT := coverage.out
 ##@ Go Development
 
 .PHONY: build
-.PHONY: test test-all test-coverage
+.PHONY: test test-all test-coverage coverage-gate
 .PHONY: lint lint-fix lint-config lint-actions fmt clean
 .PHONY: run run-local test-api ci check
 .PHONY: release-check release-local
@@ -72,6 +72,10 @@ test-report: ## Run tests with coverage report then open
 test-coverage: ## Run tests with coverage report
 	@ $(MAKE) --no-print-directory log-$@
 	@go test -v -race -coverprofile=$(COVERAGE_OUT) ./...
+
+coverage-gate: ## Enforce per-package coverage floor (80%; cmd/ + generated exempt)
+	@ $(MAKE) --no-print-directory log-$@
+	@./scripts/coverage-gate.sh $(COVERAGE_OUT)
 
 
 ## Code Quality

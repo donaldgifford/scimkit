@@ -42,7 +42,7 @@ target "_common" {
   labels = {
     "org.opencontainers.image.source"      = "https://github.com/donaldgifford/scimkit"
     "org.opencontainers.image.licenses"    = "Apache-2.0"
-    "org.opencontainers.image.description" = "A Go library of scim primatives"
+    "org.opencontainers.image.description" = "SCIM 2.0 primitives for Go: mock server and IdP traffic simulator"
   }
 }
 

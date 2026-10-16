@@ -1,0 +1,42 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/entra/identity/app-provisioning/use-scim-to-provision-users-and-groups",
+  "description": "Entra ID pathless Replace flattens sub-attributes into dotted keys and extension attributes into full-URN keys instead of nesting objects.",
+  "resourceType": "User",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "Replace",
+        "value": {
+          "displayName": "Babs Jensen",
+          "name.givenName": "Barbara",
+          "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department": "Tour Operations"
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "entra",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName": "bjensen@example.com",
+        "name": { "givenName": "Barb", "familyName": "Jensen" }
+      },
+      "wantChanged": true,
+      "want": [
+        { "path": "displayName", "value": "Babs Jensen" },
+        { "path": "name.givenName", "value": "Barbara" },
+        { "path": "name.familyName", "value": "Jensen" },
+        {
+          "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department",
+          "value": "Tour Operations"
+        }
+      ]
+    },
+    {
+      "profile": "strict",
+      "decodeError": "invalidSyntax"
+    }
+  ]
+}

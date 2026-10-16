@@ -1,0 +1,47 @@
+{
+  "_source": "https://developer.okta.com/docs/reference/scim/scim-20/#update-a-specific-group-name-or-group-membership",
+  "description": "Okta re-adds group members it believes are missing, sending only the member id. Re-adding an existing member must be a no-op with Changed=false so servers do not bump meta.version.",
+  "resourceType": "Group",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "add",
+        "path": "members",
+        "value": [{ "value": "2819c223-7f76-453a-919d-413861904646" }]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "okta",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+        "displayName": "Tour Guides",
+        "members": [
+          {
+            "value": "2819c223-7f76-453a-919d-413861904646",
+            "$ref": "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646"
+          }
+        ]
+      },
+      "wantChanged": false,
+      "want": [{ "path": "members", "len": 1 }]
+    },
+    {
+      "profile": "strict",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+        "displayName": "Tour Guides",
+        "members": [
+          {
+            "value": "2819c223-7f76-453a-919d-413861904646",
+            "$ref": "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646"
+          }
+        ]
+      },
+      "wantChanged": false,
+      "want": [{ "path": "members", "len": 1 }]
+    }
+  ]
+}

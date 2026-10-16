@@ -54,8 +54,16 @@ jobs:
         with:
           experimental: true
 
+      - name: Check generated code is current
+        run: |
+          go generate ./...
+          git diff --exit-code
+
       - name: Run unit tests
         run: just test-coverage
+
+      - name: Enforce coverage floor
+        run: just coverage-gate
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
@@ -64,6 +72,62 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: donaldgifford/scimkit
         continue-on-error: true
+
+  self-check:
+    name: Simulator Self-Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build CLI
+        run: go build -o build/bin/scimkit ./cmd/scimkit
+
+      # The simulator validates the mock and the mock validates the
+      # simulator; a wrong-token run must fail to prove detection works.
+      - name: Exercise the mock with the built CLI
+        run: ./scripts/self-check.sh build/bin/scimkit
+
+  container-smoke:
+    name: Container Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          targets: scimkit-ci
+          load: true
+          push: false
+
+      - name: Start mock container
+        run: |
+          docker run -d --name scimkit-mock -p 8080:8080 \
+            ghcr.io/donaldgifford/scimkit:dev-ci \
+            mock --profile okta --token smoke
+
+      - name: Drive an Okta-shaped create/lookup/patch flow
+        run: ./scripts/smoke-http.sh http://127.0.0.1:8080 smoke
+
+      - name: Exercise the container with its own simulator
+        run: |
+          docker run --rm --network host \
+            ghcr.io/donaldgifford/scimkit:dev-ci \
+            exercise --target http://127.0.0.1:8080 --token smoke \
+            --scenario okta-user-lifecycle
+
+      - name: Mock logs
+        if: always()
+        run: docker logs scimkit-mock && docker rm -f scimkit-mock
 
   security:
     name: Security Scan

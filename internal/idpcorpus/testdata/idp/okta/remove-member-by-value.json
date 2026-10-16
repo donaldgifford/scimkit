@@ -1,0 +1,34 @@
+{
+  "_source": "https://developer.okta.com/docs/reference/scim/scim-20/#update-a-specific-group-name-or-group-membership",
+  "description": "Okta removes group members with an op-level value array selecting members by id instead of a valuePath filter in the path.",
+  "resourceType": "Group",
+  "request": {
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+    "Operations": [
+      {
+        "op": "remove",
+        "path": "members",
+        "value": [{ "value": "2819c223-7f76-453a-919d-413861904646" }]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "profile": "okta",
+      "seed": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+        "displayName": "Tour Guides",
+        "members": [
+          { "value": "2819c223-7f76-453a-919d-413861904646" },
+          { "value": "902c246b-6245-4190-8e05-00816be7344a" }
+        ]
+      },
+      "wantChanged": true,
+      "want": [{ "path": "members", "len": 1 }]
+    },
+    {
+      "profile": "strict",
+      "decodeError": "invalidValue"
+    }
+  ]
+}

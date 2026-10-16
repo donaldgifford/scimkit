@@ -253,6 +253,12 @@ linters:
           - gosec
         text: "G304:"
 
+      # Developer-run go:generate tool; paths and log content come from
+      # repo-owned fixtures, not untrusted input.
+      - linters:
+          - gosec
+        path: internal/schemagen/
+
       # CLI color output to stdout; errors are not actionable.
       - linters:
           - gosec
