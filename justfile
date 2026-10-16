@@ -85,6 +85,16 @@ test-coverage:
 coverage-gate:
     @./scripts/coverage-gate.sh {{ coverage_out }}
 
+# Simulator ↔ mock self-check over the built CLI (IMPL-0001 phase 6)
+[group('test')]
+self-check: build
+    @./scripts/self-check.sh {{ bin_dir }}/scimkit
+
+# Okta-shaped HTTP smoke flow against a running SCIM server
+[group('test')]
+smoke base_url token="":
+    @./scripts/smoke-http.sh {{ base_url }} {{ token }}
+
 # Run tests and open the HTML coverage report
 [group('test')]
 test-report:
