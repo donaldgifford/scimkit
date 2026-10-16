@@ -54,6 +54,20 @@ type Config struct {
 	// count parameter. Defaults to 100.
 	DefaultPageSize int
 
+	// MaxPageSize caps the count a list request may ask for. Larger
+	// values are clamped, never rejected (RFC 7644 §3.4.2.4 lets the
+	// service provider return fewer than requested; itemsPerPage reports
+	// what was actually returned). Defaults to 200 or DefaultPageSize,
+	// whichever is larger; an explicit value below DefaultPageSize is a
+	// configuration error.
+	MaxPageSize int
+
+	// MaxBodyBytes bounds every request body the handler reads (create,
+	// replace, patch, .search). A larger body is answered with 413 before
+	// any decoding happens. Defaults to 1 MiB; negative is a
+	// configuration error.
+	MaxBodyBytes int64
+
 	// Logger receives request and startup log lines. Defaults to
 	// slog.Default().
 	Logger *slog.Logger
@@ -62,6 +76,14 @@ type Config struct {
 // defaultPageSize applies when a list request has no count parameter and
 // the config does not override it.
 const defaultPageSize = 100
+
+// defaultMaxPageSize caps count when the config does not override it.
+const defaultMaxPageSize = 200
+
+// defaultMaxBodyBytes bounds request bodies when the config does not
+// override it: generous for any real SCIM resource, small enough that a
+// hostile client cannot make the handler buffer gigabytes.
+const defaultMaxBodyBytes = 1 << 20
 
 // validate checks the config and applies defaults in place.
 func (c *Config) validate() error {
@@ -80,6 +102,19 @@ func (c *Config) validate() error {
 	}
 	if c.DefaultPageSize < 0 {
 		return errors.New("server: Config.DefaultPageSize must not be negative")
+	}
+	if c.MaxPageSize == 0 {
+		c.MaxPageSize = max(defaultMaxPageSize, c.DefaultPageSize)
+	}
+	if c.MaxPageSize < c.DefaultPageSize {
+		return fmt.Errorf("server: Config.MaxPageSize (%d) must be at least DefaultPageSize (%d)",
+			c.MaxPageSize, c.DefaultPageSize)
+	}
+	if c.MaxBodyBytes == 0 {
+		c.MaxBodyBytes = defaultMaxBodyBytes
+	}
+	if c.MaxBodyBytes < 0 {
+		return errors.New("server: Config.MaxBodyBytes must not be negative")
 	}
 	if c.Logger == nil {
 		c.Logger = slog.Default()

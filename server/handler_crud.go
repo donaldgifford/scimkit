@@ -13,7 +13,7 @@ func (h *typeHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, h.cfg.Logger, err)
 		return
 	}
-	body, err := readBody(r)
+	body, err := h.readBody(w, r)
 	if err != nil {
 		writeError(w, h.cfg.Logger, err)
 		return
@@ -65,8 +65,10 @@ func (h *typeHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	h.writeResource(w, res, proj, http.StatusOK)
 }
 
-// handleReplace serves PUT /{type}/{id} (RFC 7644 §3.5.1) as a locked
-// read-modify-write: readOnly attributes are retained from the current
+// handleReplace serves PUT /{type}/{id} (RFC 7644 §3.5.1). The body is
+// read and decoded before the resource's stripe lock is taken, so a slow
+// or malformed client never holds the lock; only the read-merge-write
+// runs under it. readOnly attributes are retained from the current
 // resource, immutable ones must match, and the current version rides
 // along as the store's compare-and-swap token.
 func (h *typeHandler) handleReplace(w http.ResponseWriter, r *http.Request) {
@@ -75,21 +77,8 @@ func (h *typeHandler) handleReplace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, h.cfg.Logger, err)
 		return
 	}
-	body, err := readBody(r)
+	body, err := h.readBody(w, r)
 	if err != nil {
-		writeError(w, h.cfg.Logger, err)
-		return
-	}
-	id := r.PathValue("id")
-	unlock := h.locks.lock(h.rt.Endpoint, id)
-	defer unlock()
-
-	current, err := h.store.Get(r.Context(), id)
-	if err != nil {
-		writeError(w, h.cfg.Logger, err)
-		return
-	}
-	if err := checkIfMatch(r, current); err != nil {
 		writeError(w, h.cfg.Logger, err)
 		return
 	}
@@ -98,20 +87,36 @@ func (h *typeHandler) handleReplace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, h.cfg.Logger, err)
 		return
 	}
-	if err := mergePut(incoming, current, &h.rt); err != nil {
-		writeError(w, h.cfg.Logger, err)
-		return
-	}
-	if err := validateResource(incoming, &h.rt, h.cfg.strict()); err != nil {
-		writeError(w, h.cfg.Logger, err)
-		return
-	}
-	replaced, err := h.store.Replace(r.Context(), id, incoming)
+	replaced, err := h.replaceLocked(r, r.PathValue("id"), incoming)
 	if err != nil {
 		writeError(w, h.cfg.Logger, err)
 		return
 	}
 	h.writeResource(w, replaced, proj, http.StatusOK)
+}
+
+// replaceLocked is the read-merge-validate-write half of PUT under the
+// stripe lock. Validation has to run here, after the merge: omitted
+// immutable and readOnly attributes are retained from the current
+// resource, so the decoded body alone is not what gets persisted.
+func (h *typeHandler) replaceLocked(r *http.Request, id string, incoming *scim.Resource) (*scim.Resource, error) {
+	unlock := h.locks.lock(h.rt.Endpoint, id)
+	defer unlock()
+
+	current, err := h.store.Get(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkIfMatch(r, current); err != nil {
+		return nil, err
+	}
+	if err := mergePut(incoming, current, &h.rt); err != nil {
+		return nil, err
+	}
+	if err := validateResource(incoming, &h.rt, h.cfg.strict()); err != nil {
+		return nil, err
+	}
+	return h.store.Replace(r.Context(), id, incoming)
 }
 
 // handleDelete serves DELETE /{type}/{id} (RFC 7644 §3.6): 204 with no

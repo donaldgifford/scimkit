@@ -24,7 +24,7 @@ func (h *typeHandler) handlePatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, h.cfg.Logger, err)
 		return
 	}
-	body, err := readBody(r)
+	body, err := h.readBody(w, r)
 	if err != nil {
 		writeError(w, h.cfg.Logger, err)
 		return
@@ -51,25 +51,49 @@ func (h *typeHandler) handlePatch(w http.ResponseWriter, r *http.Request) {
 // patchNative delegates to the store's Patcher, which owns atomicity and
 // version bumps. An If-Match precondition is checked against the current
 // resource first — best effort, since the store applies independently.
+// Under patch.Strict the ops are also pre-flighted through patch.Apply
+// and the schema validator so canonicalValues and required rules hold on
+// PATCH exactly as on PUT; the Patcher's own apply is the one that
+// commits.
 func (h *typeHandler) patchNative(r *http.Request, id string, ops []patch.Op) (*scim.Resource, error) {
-	if r.Header.Get("If-Match") != "" {
-		current, err := h.store.Get(r.Context(), id)
-		if err != nil {
-			return nil, err
-		}
-		if err := checkIfMatch(r, current); err != nil {
+	strict := h.cfg.strict()
+	if r.Header.Get("If-Match") == "" && !strict {
+		return h.patcher.Patch(r.Context(), id, ops)
+	}
+	current, err := h.store.Get(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkIfMatch(r, current); err != nil {
+		return nil, err
+	}
+	if strict {
+		if err := h.preflightPatch(current, ops); err != nil {
 			return nil, err
 		}
 	}
 	return h.patcher.Patch(r.Context(), id, ops)
 }
 
-// patchFallback is the Get → patch.Apply → conditional Replace cycle for
-// stores without native PATCH. It runs under the resource's stripe lock;
-// the compare-and-swap retry loop covers writers that bypass this
-// server. The If-Match precondition is checked once, against the first
-// read — later retries reconcile with concurrent writers, which is
-// exactly what the precondition-free CAS loop is for.
+// preflightPatch applies ops to current and validates the outcome
+// without persisting anything; patch.Apply never mutates its input.
+func (h *typeHandler) preflightPatch(current *scim.Resource, ops []patch.Op) error {
+	result, err := patch.Apply(current, ops, h.cfg.Profile)
+	if err != nil {
+		return err
+	}
+	if !result.Changed {
+		return nil
+	}
+	return validateResource(result.Resource, &h.rt, true)
+}
+
+// patchFallback is the Get → patch.Apply → validate → conditional Replace
+// cycle for stores without native PATCH. It runs under the resource's
+// stripe lock; the compare-and-swap retry loop covers writers that
+// bypass this server. The If-Match precondition is checked once, against
+// the first read — later retries reconcile with concurrent writers,
+// which is exactly what the precondition-free CAS loop is for.
 func (h *typeHandler) patchFallback(r *http.Request, id string, ops []patch.Op) (*scim.Resource, error) {
 	unlock := h.locks.lock(h.rt.Endpoint, id)
 	defer unlock()
@@ -92,6 +116,9 @@ func (h *typeHandler) patchFallback(r *http.Request, id string, ops []patch.Op) 
 			return current, nil
 		}
 		next := result.Resource
+		if err := validateResource(next, &h.rt, h.cfg.strict()); err != nil {
+			return nil, err
+		}
 		m := next.Meta()
 		m.LastModified = time.Now().UTC()
 		next.SetMeta(m)
@@ -99,9 +126,8 @@ func (h *typeHandler) patchFallback(r *http.Request, id string, ops []patch.Op) 
 		if err == nil {
 			return replaced, nil
 		}
-		var scimErr *scim.Error
-		if !errors.As(err, &scimErr) || scimErr.Status != http.StatusPreconditionFailed ||
-			attempt+1 >= patchRetries {
+		scimErr, ok := errors.AsType[*scim.Error](err)
+		if !ok || scimErr.Status != http.StatusPreconditionFailed || attempt+1 >= patchRetries {
 			return nil, err
 		}
 	}
