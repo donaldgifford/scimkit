@@ -1,10 +1,18 @@
 package client
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
 )
+
+// TokenSource yields the bearer token for one request attempt. It is
+// called on every attempt (including retries) so a source backed by an
+// expiring OAuth credential can hand out a refreshed token; an error
+// aborts the request without retrying. An empty token sends no
+// Authorization header.
+type TokenSource func(ctx context.Context) (string, error)
 
 // Option configures a Client. Pass options to New.
 type Option func(*config)
@@ -12,7 +20,7 @@ type Option func(*config)
 // config is the accumulated option state, applied in New.
 type config struct {
 	httpClient    *http.Client
-	token         string
+	tokenSource   TokenSource
 	retry         RetryConfig
 	logger        *slog.Logger
 	search        bool
@@ -31,9 +39,17 @@ func defaultConfig() config {
 }
 
 // WithBearerToken sets a constant OAuth bearer token sent as the
-// Authorization header on every request. There is no refresh hook in v0.
+// Authorization header on every request. It is sugar for WithTokenSource
+// with a source that always returns token; use WithTokenSource when the
+// credential expires and must be refreshed.
 func WithBearerToken(token string) Option {
-	return func(c *config) { c.token = token }
+	return WithTokenSource(func(context.Context) (string, error) { return token, nil })
+}
+
+// WithTokenSource sets the bearer token source consulted on every
+// request attempt. A nil source disables the Authorization header.
+func WithTokenSource(ts TokenSource) Option {
+	return func(c *config) { c.tokenSource = ts }
 }
 
 // WithHTTPClient sets the underlying HTTP client; its Transport and

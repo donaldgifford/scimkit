@@ -18,15 +18,17 @@ import (
 type Client struct {
 	baseURL       *url.URL
 	httpClient    *http.Client
-	token         string
+	tokenSource   TokenSource
 	retry         RetryConfig
 	logger        *slog.Logger
 	search        bool
 	patchFallback bool
 	clock         sleeper
 
-	capsMu sync.Mutex
-	caps   *Capabilities
+	capsMu       sync.Mutex
+	caps         *Capabilities
+	capsInflight *capsFetch
+	capsWarnOnce sync.Once
 
 	typesMu sync.Mutex
 	types   map[string]*scim.ResourceType
@@ -54,7 +56,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	return &Client{
 		baseURL:       u,
 		httpClient:    cfg.httpClient,
-		token:         cfg.token,
+		tokenSource:   cfg.tokenSource,
 		retry:         cfg.retry,
 		logger:        cfg.logger,
 		search:        cfg.search,

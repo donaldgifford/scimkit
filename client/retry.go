@@ -32,6 +32,15 @@ type RetryConfig struct {
 	// retries while MaxAttempts>1). Nil means the default 5xx set; an
 	// explicit empty slice retries only 429.
 	RetryStatus []int
+	// RetryNonIdempotent extends network-error and RetryStatus retries
+	// to POST and PATCH. It is off by default because those methods are
+	// not idempotent: a POST /Users whose response is lost after the
+	// server committed would be replayed and create duplicate users (or
+	// 409s the caller must untangle). 429 is retried for every method
+	// regardless, since the server explicitly did not process it.
+	// Enable this only when the target is known to deduplicate or the
+	// caller already does lookup-then-create.
+	RetryNonIdempotent bool
 }
 
 // DefaultRetryConfig is Okta's documented provisioning retry protocol:
@@ -80,6 +89,31 @@ func (rc RetryConfig) normalize() RetryConfig {
 // (while attempts remain), plus the configured status set.
 func (rc RetryConfig) shouldRetry(status int) bool {
 	return status == http.StatusTooManyRequests || slices.Contains(rc.RetryStatus, status)
+}
+
+// retryable decides whether one failed attempt may be repeated. A
+// network error (status 0) or a configured retry status is repeated only
+// for idempotent methods unless RetryNonIdempotent is set; 429 is
+// repeated for every method because the server did not process it.
+func (rc RetryConfig) retryable(method string, status int) bool {
+	if status == http.StatusTooManyRequests {
+		return true
+	}
+	if status != 0 && !slices.Contains(rc.RetryStatus, status) {
+		return false
+	}
+	return rc.RetryNonIdempotent || isIdempotent(method)
+}
+
+// isIdempotent reports whether an HTTP method is safe to replay
+// (RFC 9110 §9.2.2).
+func isIdempotent(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPut, http.MethodDelete, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
 }
 
 // backoffDelay computes the delay before retry attempt n (1-indexed:

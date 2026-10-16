@@ -32,20 +32,32 @@ func (c *Client) requestURL(segments ...string) string {
 // caller decodes), or a RetryExhaustedError when a retryable condition
 // outlasts MaxAttempts, or the context error on cancellation. A fresh
 // request is built from body on every attempt, so there is no shared
-// request state to reset between retries.
+// request state to reset between retries, and the bearer token is
+// resolved per attempt so a refreshed credential is used on retry.
+//
+// Retries are gated on method idempotency (see
+// RetryConfig.RetryNonIdempotent): a POST or PATCH that fails with a
+// network error or a 5xx is returned as-is rather than replayed.
 func (c *Client) do(
 	ctx context.Context, method, rawURL string, body []byte, headers map[string]string,
 ) (*rawResponse, error) {
 	var last error
 	for attempt := 1; attempt <= c.retry.MaxAttempts; attempt++ {
-		resp, err := c.attempt(ctx, method, rawURL, body, headers)
+		token, err := c.bearer(ctx)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.attempt(ctx, method, rawURL, body, token, headers)
 		switch {
 		case err != nil:
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return nil, fmt.Errorf("scimkit client: request aborted: %w", ctxErr)
 			}
+			if !c.retry.retryable(method, 0) {
+				return nil, fmt.Errorf("scimkit client: %s request failed (not retried: non-idempotent): %w", method, err)
+			}
 			last, resp = err, nil
-		case !c.retry.shouldRetry(resp.status):
+		case !c.retry.retryable(method, resp.status):
 			return resp, nil
 		default:
 			last = decodeError(resp.status, resp.body)
@@ -60,9 +72,22 @@ func (c *Client) do(
 	return nil, &RetryExhaustedError{Attempts: c.retry.MaxAttempts, Last: last}
 }
 
+// bearer resolves the bearer token for one attempt; an empty token
+// sends no Authorization header.
+func (c *Client) bearer(ctx context.Context) (string, error) {
+	if c.tokenSource == nil {
+		return "", nil
+	}
+	token, err := c.tokenSource(ctx)
+	if err != nil {
+		return "", fmt.Errorf("scimkit client: token source: %w", err)
+	}
+	return token, nil
+}
+
 // attempt performs one request/response cycle and reads the body.
 func (c *Client) attempt(
-	ctx context.Context, method, rawURL string, body []byte, headers map[string]string,
+	ctx context.Context, method, rawURL string, body []byte, token string, headers map[string]string,
 ) (*rawResponse, error) {
 	var reader io.Reader
 	if body != nil {
@@ -72,7 +97,7 @@ func (c *Client) attempt(
 	if err != nil {
 		return nil, fmt.Errorf("scimkit client: build request: %w", err)
 	}
-	c.setHeaders(req, body != nil, headers)
+	setHeaders(req, body != nil, token, headers)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -87,13 +112,13 @@ func (c *Client) attempt(
 
 // setHeaders applies the SCIM media type, optional auth, and any
 // per-request headers.
-func (c *Client) setHeaders(req *http.Request, hasBody bool, headers map[string]string) {
+func setHeaders(req *http.Request, hasBody bool, token string, headers map[string]string) {
 	req.Header.Set("Accept", mediaType)
 	if hasBody {
 		req.Header.Set("Content-Type", mediaType)
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -140,6 +165,6 @@ func (c *Client) doResource(
 // isNotImplemented reports whether err is a 501 protocol error, the
 // signal to fall back from PATCH to PUT.
 func isNotImplemented(err error) bool {
-	var scimErr *scim.Error
-	return errors.As(err, &scimErr) && scimErr.Status == http.StatusNotImplemented
+	scimErr, ok := errors.AsType[*scim.Error](err)
+	return ok && scimErr.Status == http.StatusNotImplemented
 }
