@@ -21,52 +21,83 @@ jobs:
     name: Label PR
     steps:
       - name: Label PR
-        uses: actions/labeler@v6
+        uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d # v6.2.0
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
+
+      # Single source of truth for the linter version is mise.toml.
+      - name: Read golangci-lint pin from mise.toml
+        id: pin
+        run: echo "version=v$(grep -E '^golangci-lint = ' mise.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.11.4
+          version: ${{ steps.pin.outputs.version }}
 
   test-go:
-    name: Test Go
+    name: Test Go (${{ matrix.go }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # go.mod's `go` floor: the library must build and test on the
+          # oldest supported minor. GOTOOLCHAIN=local keeps Go from
+          # auto-downloading the newer `toolchain` line, so the floor is
+          # exercised for real.
+          - go: "1.26"
+            primary: false
+          # The pinned toolchain (go.mod `toolchain`, mise.toml, Dockerfile)
+          # that coverage, generated-code drift, and Codecov gate on.
+          - go: "1.27"
+            primary: true
+    env:
+      GOTOOLCHAIN: local
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
+          check-latest: true
 
       - name: Set up mise (for just)
-        uses: jdx/mise-action@v4
+        if: matrix.primary
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           experimental: true
 
       - name: Check generated code is current
+        if: matrix.primary
         run: |
           go generate ./...
           git diff --exit-code
 
+      - name: Run unit tests (floor)
+        if: ${{ !matrix.primary }}
+        run: go test -race ./...
+
       - name: Run unit tests
+        if: matrix.primary
         run: just test-coverage
 
       - name: Enforce coverage floor
+        if: matrix.primary
         run: just coverage-gate
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        if: matrix.primary
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -77,10 +108,10 @@ jobs:
     name: Simulator Self-Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
 
@@ -96,13 +127,13 @@ jobs:
     name: Container Smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build image
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@5be5f02ff8819ecd3092ea6b2e6261c31774f2b4 # v6.10.0
         with:
           source: .
           targets: scimkit-ci
@@ -136,21 +167,21 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
 
       - name: Run govulncheck
-        uses: donaldgifford/govulncheck-action@v1
+        uses: donaldgifford/govulncheck-action@fe7219aad62f0d90013615d198cee2beea53bf5b # v1
         with:
           go-version-file: go.mod
           go-package: ./...
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -165,18 +196,18 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Build snapshot release with SBOMs
-        uses: goreleaser/goreleaser-action@v7.1.0
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: "~> v2"
           args: release --snapshot --skip=publish --skip=sign --clean
@@ -187,7 +218,7 @@ jobs:
 
       - name: Scan archive SBOM
         id: scan-sbom
-        uses: anchore/scan-action@v7
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           sbom: ${{ steps.sbom-path.outputs.path }}
           severity-cutoff: high
@@ -196,7 +227,7 @@ jobs:
 
       - name: Upload SBOM scan SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v4.35.5
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
         with:
           sarif_file: ${{ steps.scan-sbom.outputs.sarif }}
           category: anchore-archive-sbom
