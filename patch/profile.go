@@ -40,7 +40,9 @@ type Profile struct {
 	// SynthesizeAddValuePath manufactures a new element from an add
 	// targeting a valuePath that matches nothing, seeding the element
 	// from the filter's eq clauses. Only eq-only conjunction filters
-	// qualify; anything else is rejected at decode. Entra ID adds
+	// qualify; eligibility is checked at apply time when no element
+	// matches, and anything else falls through to the strict noTarget
+	// error. Entra ID adds
 	// addresses[type eq "work"].locality style paths for elements that
 	// do not exist yet.
 	SynthesizeAddValuePath bool

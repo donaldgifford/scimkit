@@ -660,10 +660,17 @@ The testing story and the shippable artifact.
       `TestSimulateSelfCheck` proves a healthy mock passes
       rfc-strict-lifecycle while a wrong-token config fails it — the CI
       self-check contract. scimtest coverage 88.2%)_
-- [ ] CLI (stdlib `flag`, subcommand dispatch): `mock` (`--addr`,
+- [x] CLI (stdlib `flag`, subcommand dispatch): `mock` (`--addr`,
       `--seed`, `--profile`, `--latency`, `--fail-rate`), `exercise`
       (`--target`, `--token`, `--scenario`, `--report`), `version`; slog
       default handler, SIGTERM graceful shutdown
+      _(`cmd/scimkit/{main,mock,exercise,usage}.go`: `run(ctx, args,
+      stdout)` dispatches so tests capture output; logs go to stderr and
+      stdout is reserved for the report; `exercise` exits non-zero via a
+      sentinel error when the scenario fails. `mock` adds `--token` beyond
+      the sketch and defaults to the strict profile;
+      `scimtest.ParseProfileName` maps the flag so the CLI never imports
+      `patch`. The image's default command is `mock`)_
 - [x] Chaos middleware for the mock: injected latency + failure rate (for
       consumer retry testing)
       _(`ChaosConfig{Latency, FailRate, FailStatus, Rand}` + `WithChaos`.
@@ -678,17 +685,37 @@ The testing story and the shippable artifact.
       request never blocks a goroutine. Composition: chaos sits between the
       recorder (outermost) and the SCIM handler, so failures are recorded
       and seeding — through the bare handler — is unaffected)_
-- [ ] CI self-check: `exercise` running `rfc-strict-lifecycle` against
+- [x] CI self-check: `exercise` running `rfc-strict-lifecycle` against
       `scimtest.NewServer` (the simulator validates the mock, the mock
       validates the simulator)
-- [ ] Container smoke test in CI: build via `docker buildx bake`, run the
+      _(two layers: `cmd/scimkit/main_test.go` runs it in-process against
+      `scimtest.NewServer`, and `scripts/self-check.sh` (`just
+      self-check`, CI job "Simulator Self-Check") runs the built binary
+      over TCP — a healthy mock passes, a wrong-token mock must fail, then
+      the Okta-shaped HTTP flow in `scripts/smoke-http.sh` runs)_
+- [x] Container smoke test in CI: build via `docker buildx bake`, run the
       image, drive an Okta-shaped create/lookup/patch flow against it
-- [ ] README: replace placeholder snippets with real quickstarts (server,
+      _(CI job "Container Smoke": bakes `scimkit-ci`, runs it with
+      `--profile okta --token`, drives `scripts/smoke-http.sh` (SPC →
+      userName-eq lookup → create → lookup → PATCH active=false → delete),
+      then runs `exercise --scenario okta-user-lifecycle` from the same
+      image. Surfaced that `release.yml` never published the image the
+      bake file was written for — added its "Publish Image" job using
+      metadata-action's bake-file tag override)_
+- [x] README: replace placeholder snippets with real quickstarts (server,
       client, `go test` mock, docker mock, exercise) backed by `Example`
       tests
-- [ ] Final pre-tag API review: godoc read-through of every package,
+      _(`server/example_test.go`, `client/example_test.go`,
+      `scimtest/example_test.go` carry `// Output:` examples; the README
+      snippets are trimmed copies of them)_
+- [x] Final pre-tag API review: godoc read-through of every package,
       resolve TODOs, verify DESIGN-0001 sketches match reality (update the
       design doc where they deliberately don't)
+      _(no TODOs in tree; package docs accurate against `go doc -all`;
+      DESIGN-0001 sketches updated to the shipped names — filter
+      `ParseOption`/AST names, `patch.EncodeOps`, the Store CAS contract,
+      the `client` resource-based services, the `scimtest` option set and
+      `Simulate` signature, the CLI flags, the corpus path)_
 - [ ] Ship it: final PR labeled `minor` → **v0.1.0** tag, archives, image
 
 #### Success criteria (phase 6)
@@ -758,16 +785,16 @@ Key files by phase (all Create unless noted):
 
 Per DESIGN-0001's Testing Strategy; tracked here as cross-phase work:
 
-- [ ] Table-driven unit tests per package, race detector always on
-- [ ] RFC conformance test files (PATCH §3.5.2, filter Table 3, error
+- [x] Table-driven unit tests per package, race detector always on
+- [x] RFC conformance test files (PATCH §3.5.2, filter Table 3, error
       Tables 8/9, projection rules) mirroring spec structure
-- [ ] Golden IdP corpus asserted under every Profile (phase 3 onward)
-- [ ] Fuzz targets + committed corpora: codec (phase 1), filter
+- [x] Golden IdP corpus asserted under every Profile (phase 3 onward)
+- [x] Fuzz targets + committed corpora: codec (phase 1), filter
       parse/path (phase 2), patch decode (phase 3)
-- [ ] Round-trip property tests: schema↔wire, typed↔Resource↔JSON
-- [ ] client↔server httptest integration (phase 5); simulator↔mock
+- [x] Round-trip property tests: schema↔wire, typed↔Resource↔JSON
+- [x] client↔server httptest integration (phase 5); simulator↔mock
       self-check and container smoke test (phase 6)
-- [ ] Coverage enforcement per Open Questions Q6
+- [x] Coverage enforcement per Open Questions Q6
 
 ## Dependencies
 
@@ -826,7 +853,7 @@ DESIGN-0001 Q8 allows test-only deps, naming "go-cmp and/or testify":
 **Decision: a, with a standing amendment: tests are table-driven,
 always.** Table-driven structure is the house style and is independent of
 the assertion library — testify (and go-cmp for deep diffs) are used
-*inside* table cases where they fit, and where they don't, the test is
+_inside_ table cases where they fit, and where they don't, the test is
 still written as a table with plain stdlib assertions. This is recorded in
 [Conventions for every phase PR](#conventions-for-every-phase-pr).
 
@@ -848,7 +875,7 @@ still written as a table with plain stdlib assertions. This is recorded in
 
 **Decision: a, staged.** Phase 1 lands hand-extracted, hand-validated
 JSON (careful review against the RFC text, provenance headers). The
-*automated* assurance layer — checksum pinning, or a verification/
+_automated_ assurance layer — checksum pinning, or a verification/
 extraction tool — is explicitly deferred; how to guarantee fidelity
 long-term is revisited in phase 7 alongside the other deferred decisions.
 

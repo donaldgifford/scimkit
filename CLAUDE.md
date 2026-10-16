@@ -97,8 +97,9 @@ the distroless rootfs is read-only (nonroot UID 65532).
   `archives[].formats` (slice). Validate with `goreleaser check`.
 - **CI coverage** comes from `just test-coverage` → `coverage.out`
   (not `coverage.txt`).
-- **Golden IdP corpus** under `testdata/idp/` doubles as the simulator's
-  scenario source — changing a fixture changes simulator behavior.
+- **Golden IdP corpus** under `internal/idpcorpus/testdata/idp/` (embedded
+  via `go:embed`) doubles as the simulator's scenario source — changing a
+  fixture changes simulator behavior.
 
 ## Renovate
 
