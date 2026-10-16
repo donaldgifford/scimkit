@@ -2,7 +2,7 @@ package server
 
 import (
 	"bytes"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,13 +30,20 @@ func SortResources(list []*scim.Resource, rt *scim.ResourceType, by *filter.Path
 	if sub != nil {
 		target = sub
 	}
-	keys := make(map[*scim.Resource]any, len(list))
-	for _, r := range list {
-		keys[r] = sortKey(r, rt, by, attr, sub)
+	type keyed struct {
+		key any
+		res *scim.Resource
 	}
-	sort.SliceStable(list, func(i, j int) bool {
-		return sortLess(keys[list[i]], keys[list[j]], target, ascending)
+	rows := make([]keyed, len(list))
+	for i, r := range list {
+		rows[i] = keyed{key: sortKey(r, rt, by, attr, sub), res: r}
+	}
+	slices.SortStableFunc(rows, func(a, b keyed) int {
+		return sortCompare(a.key, b.key, target, ascending)
 	})
+	for i := range rows {
+		list[i] = rows[i].res
+	}
 }
 
 // sortKey extracts one resource's sort key as a stored value, or nil
@@ -115,17 +122,23 @@ func matchIndex(rt *scim.ResourceType, by *filter.Path, list scim.MultiComplexVa
 	return -1
 }
 
-// sortLess orders two sort keys: nil (missing) sorts last regardless of
-// direction, otherwise the type-aware comparison honors ascending.
-func sortLess(a, b any, target *scim.Attribute, ascending bool) bool {
-	if a == nil || b == nil {
-		return a != nil && b == nil
+// sortCompare orders two sort keys three-way: nil (missing) sorts last
+// regardless of direction, otherwise the type-aware comparison honors
+// ascending.
+func sortCompare(a, b any, target *scim.Attribute, ascending bool) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return 1
+	case b == nil:
+		return -1
 	}
 	c := compareKeys(a, b, target)
 	if !ascending {
 		c = -c
 	}
-	return c < 0
+	return c
 }
 
 // compareKeys is the type-aware three-way comparison over stored forms.
