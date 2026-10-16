@@ -7,20 +7,69 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
+
+// DefaultStepTimeout bounds each simulated request so a black-holed
+// target cannot hang Simulate forever. A shorter deadline on the caller's
+// context still wins.
+const DefaultStepTimeout = 30 * time.Second
+
+// SimulateOption tunes SimulateWith. Simulate runs with the defaults.
+type SimulateOption func(*simConfig)
+
+// simConfig is the resolved simulator transport configuration.
+type simConfig struct {
+	httpClient  *http.Client
+	stepTimeout time.Duration
+}
+
+// WithHTTPClient sends simulated requests through a copy of hc instead of
+// the default client. The simulator never follows redirects: the copy's
+// CheckRedirect is replaced so a 3xx is recorded and asserted rather than
+// silently chased. A nil hc is ignored.
+func WithHTTPClient(hc *http.Client) SimulateOption {
+	return func(c *simConfig) {
+		if hc != nil {
+			c.httpClient = hc
+		}
+	}
+}
+
+// WithStepTimeout bounds each request at d instead of DefaultStepTimeout.
+// Values <= 0 are ignored.
+func WithStepTimeout(d time.Duration) SimulateOption {
+	return func(c *simConfig) {
+		if d > 0 {
+			c.stepTimeout = d
+		}
+	}
+}
 
 // Simulate runs a scenario against a target SCIM server and returns a
 // report. It uses raw HTTP, not the client package, so scenarios can send
 // the deliberately non-compliant shapes real IdPs emit and assert on exact
 // wire responses. Steps run in order and stop at the first failure — later
 // steps depend on variables captured from earlier ones. The returned error
-// is non-nil only for a malformed scenario, never for a step that fails
-// (that is reported, not returned).
+// is non-nil only for a malformed scenario or a cancelled ctx, never for a
+// step that fails (that is reported, not returned). Every request is
+// bounded by DefaultStepTimeout; SimulateWith tunes the transport.
 func Simulate(ctx context.Context, target, token string, scenario Scenario) (Report, error) {
+	return SimulateWith(ctx, target, token, scenario)
+}
+
+// SimulateWith is Simulate with transport options.
+func SimulateWith(
+	ctx context.Context, target, token string, scenario Scenario, opts ...SimulateOption,
+) (Report, error) {
 	if err := validateScenario(scenario); err != nil {
 		return Report{}, err
 	}
-	tr := newSimTransport(target, token)
+	cfg := simConfig{stepTimeout: DefaultStepTimeout}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	tr := newSimTransport(target, token, cfg)
 	vars := make(map[string]string)
 	report := Report{Scenario: scenario.Name, Target: target}
 
@@ -29,6 +78,10 @@ func Simulate(ctx context.Context, target, token string, scenario Scenario) (Rep
 		result := runStep(ctx, tr, step, vars)
 		report.Steps = append(report.Steps, result)
 		if !result.Passed {
+			// A cancelled caller is not a verdict on the target.
+			if cerr := ctx.Err(); cerr != nil {
+				return report, fmt.Errorf("scimtest: simulate aborted at %q: %w", step.Name, cerr)
+			}
 			report.Aborted = true
 			report.AbortedAt = step.Name
 			break
@@ -109,24 +162,40 @@ func hasHeader(h map[string]string, key string) bool {
 const mediaType = "application/scim+json"
 
 // simTransport issues single-shot SCIM requests: no retry, no redirect
-// surprises, so a scenario observes exactly what the target returned.
+// following, and a deadline on every request, so a scenario observes
+// exactly what the target returned and never hangs on one that is silent.
 type simTransport struct {
-	httpClient *http.Client
-	baseURL    string
-	token      string
+	httpClient  *http.Client
+	baseURL     string
+	token       string
+	stepTimeout time.Duration
 }
 
-func newSimTransport(target, token string) *simTransport {
+func newSimTransport(target, token string, cfg simConfig) *simTransport {
+	hc := &http.Client{}
+	if cfg.httpClient != nil {
+		// Copy so the redirect policy never mutates the caller's client.
+		cp := *cfg.httpClient
+		hc = &cp
+	}
+	hc.CheckRedirect = noRedirect
 	return &simTransport{
-		httpClient: &http.Client{},
-		baseURL:    strings.TrimRight(target, "/"),
-		token:      token,
+		httpClient:  hc,
+		baseURL:     strings.TrimRight(target, "/"),
+		token:       token,
+		stepTimeout: cfg.stepTimeout,
 	}
 }
+
+// noRedirect hands the 3xx response back instead of following Location,
+// so the scenario can assert on it.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func (t *simTransport) do(
 	ctx context.Context, method, path string, headers map[string]string, body []byte,
 ) (int, http.Header, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, t.stepTimeout)
+	defer cancel()
 	reader := io.Reader(http.NoBody)
 	if len(body) > 0 {
 		reader = bytes.NewReader(body)
