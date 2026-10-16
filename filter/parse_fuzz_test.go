@@ -2,6 +2,7 @@ package filter
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +41,10 @@ func FuzzParse(f *testing.F) {
 		`a eq "unterminated`,
 		`(((((a pr`,
 		`emails[emails[type pr]]`,
+		`emails[type pr and ims[value pr]]`,
+		strings.Repeat("(", 64) + `a pr` + strings.Repeat(")", 64),
+		strings.Repeat("(", 65) + `a pr` + strings.Repeat(")", 65),
+		strings.Repeat("not (", 200) + `a pr`,
 		`a eq TRUE`,
 		`not not not (a pr)`,
 		``,
@@ -81,6 +86,8 @@ func FuzzParsePath(f *testing.F) {
 		`$ref`,
 		`emails[]`,
 		`emails[type pr].`,
+		`emails[emails[type pr]].value`,
+		`emails[` + strings.Repeat("(", 65) + `type pr` + strings.Repeat(")", 65) + `]`,
 		`a.b.c`,
 		`[type pr]`,
 		``,

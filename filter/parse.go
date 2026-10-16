@@ -65,18 +65,63 @@ func ParsePath(s string, opts ...ParseOption) (Path, error) {
 // machinery serves both filters and PATCH paths, but RFC 7644 Table 9
 // assigns malformed paths their own scimType.
 func pathError(err error) error {
-	var scimErr *scim.Error
-	if errors.As(err, &scimErr) {
+	if scimErr, ok := errors.AsType[*scim.Error](err); ok {
 		return scim.ErrInvalidPath(scimErr.Detail)
 	}
 	return scim.ErrInvalidPath(err.Error())
 }
+
+// maxDepth bounds grouping depth — each '(' and each not adds a level —
+// so hostile input cannot drive the recursive-descent parser's stack
+// arbitrarily deep. 64 is far beyond any filter an IdP or operator
+// writes by hand and well inside the goroutine stack budget.
+const maxDepth = 64
 
 // parser is a recursive-descent parser with one token of lookahead.
 type parser struct {
 	s       scanner
 	tok     token
 	lenient bool
+	// depth counts the open grouping constructs (parentheses and not)
+	// the parser is inside, bounded by maxDepth.
+	depth int
+	// inValueFilter is set while parsing the valFilter inside "[...]":
+	// the grammar (RFC 7644 §3.4.2.2 Figure 1) allows only attrExp and
+	// logExp there, so a nested valuePath is a syntax error.
+	inValueFilter bool
+}
+
+// enter records one more level of grouping, failing past maxDepth.
+func (p *parser) enter() error {
+	p.depth++
+	if p.depth > maxDepth {
+		return p.errorf("nesting depth exceeds %d", maxDepth)
+	}
+	return nil
+}
+
+func (p *parser) leave() { p.depth-- }
+
+// parseValueFilter parses the valFilter between '[' and ']' with nested
+// valuePath rejected, consuming both brackets.
+func (p *parser) parseValueFilter() (Expr, error) {
+	if err := p.advance(); err != nil { // consume '['
+		return nil, err
+	}
+	outer := p.inValueFilter
+	p.inValueFilter = true
+	f, err := p.parseOr()
+	p.inValueFilter = outer
+	if err != nil {
+		return nil, err
+	}
+	if p.tok.kind != tokRBracket {
+		return nil, p.errorf("expected ']' to close value filter, found %s", p.tok.kind)
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 func newParser(s string, opts ...ParseOption) (*parser, error) {
@@ -140,17 +185,8 @@ func (p *parser) parseValueFilterInto(path *Path) error {
 	if path.SubAttr != "" {
 		return p.errorf("value filter must follow the attribute, not sub-attribute %q", path.SubAttr)
 	}
-	if err := p.advance(); err != nil { // consume '['
-		return err
-	}
-	f, err := p.parseOr()
+	f, err := p.parseValueFilter()
 	if err != nil {
-		return err
-	}
-	if p.tok.kind != tokRBracket {
-		return p.errorf("expected ']' to close value filter, found %s", p.tok.kind)
-	}
-	if err := p.advance(); err != nil {
 		return err
 	}
 	path.ValueFilter = f
@@ -217,6 +253,10 @@ func (p *parser) parseUnary() (Expr, error) {
 	if p.tok.kind != tokLParen && !p.lenient {
 		return nil, p.errorf("not requires a parenthesized filter")
 	}
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
 	// parsePrimary consumes the parenthesized group; under Lenient it also
 	// accepts a bare clause as not's operand.
 	e, err := p.parsePrimary()
@@ -229,20 +269,7 @@ func (p *parser) parseUnary() (Expr, error) {
 func (p *parser) parsePrimary() (Expr, error) {
 	switch p.tok.kind {
 	case tokLParen:
-		if err := p.advance(); err != nil {
-			return nil, err
-		}
-		e, err := p.parseOr()
-		if err != nil {
-			return nil, err
-		}
-		if p.tok.kind != tokRParen {
-			return nil, p.errorf("expected ')', found %s", p.tok.kind)
-		}
-		if err := p.advance(); err != nil {
-			return nil, err
-		}
-		return e, nil
+		return p.parseGroup()
 	case tokWord:
 		return p.parseAttrExpr()
 	case tokEOF, tokString, tokNumber, tokRParen, tokLBracket, tokRBracket:
@@ -250,6 +277,29 @@ func (p *parser) parsePrimary() (Expr, error) {
 	default:
 		return nil, p.errorf("expected attribute expression, found %s", p.tok.kind)
 	}
+}
+
+// parseGroup parses a parenthesized filter, counting it toward the depth
+// bound.
+func (p *parser) parseGroup() (Expr, error) {
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
+	if err := p.advance(); err != nil { // consume '('
+		return nil, err
+	}
+	e, err := p.parseOr()
+	if err != nil {
+		return nil, err
+	}
+	if p.tok.kind != tokRParen {
+		return nil, p.errorf("expected ')', found %s", p.tok.kind)
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
 // parseAttrExpr parses attrExp (attrPath pr / attrPath compareOp compValue)
@@ -265,7 +315,14 @@ func (p *parser) parseAttrExpr() (Expr, error) {
 		return nil, err
 	}
 	if p.tok.kind == tokLBracket {
-		return p.parseValuePath(path)
+		if p.inValueFilter {
+			return nil, p.errorf("value filter cannot nest inside a value filter")
+		}
+		f, err := p.parseValueFilter()
+		if err != nil {
+			return nil, err
+		}
+		return ValuePath{Path: path, Filter: f}, nil
 	}
 	if p.tok.kind != tokWord {
 		return nil, p.errorf("expected operator after %q, found %s", word.text, p.tok.kind)
@@ -288,23 +345,6 @@ func (p *parser) parseAttrExpr() (Expr, error) {
 		return nil, err
 	}
 	return Compare{Path: path, Op: op, Value: value}, nil
-}
-
-func (p *parser) parseValuePath(path Path) (Expr, error) {
-	if err := p.advance(); err != nil { // consume '['
-		return nil, err
-	}
-	f, err := p.parseOr()
-	if err != nil {
-		return nil, err
-	}
-	if p.tok.kind != tokRBracket {
-		return nil, p.errorf("expected ']' to close value filter, found %s", p.tok.kind)
-	}
-	if err := p.advance(); err != nil {
-		return nil, err
-	}
-	return ValuePath{Path: path, Filter: f}, nil
 }
 
 // parseCompValue parses a strict JSON compValue literal: string, number,
