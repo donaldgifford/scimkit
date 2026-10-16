@@ -22,16 +22,20 @@ mock flags:
   --addr        Listen address (default ":8080")
   --seed        Path to a JSON seed file (users/groups)
   --profile     Compatibility profile: strict|default|entra|okta (default "strict")
-  --token       Require this bearer token
+  --token       Require this bearer token (default $SCIMKIT_TOKEN)
   --latency     Artificial latency added to every response (e.g. 50ms)
   --fail-rate   Fraction of requests [0,1] to fail with 503
 
 exercise flags:
   --target      Target SCIM base URL (required)
-  --token       Bearer token
+  --token       Bearer token (default $SCIMKIT_TOKEN)
   --scenario    Scenario name (required)
   --report      Report format: text|json (default "text")
   --timeout     Overall run timeout (default 30s)
+
+Environment:
+  SCIMKIT_TOKEN  Bearer token used when --token is not given, keeping the
+                 secret out of process listings and shell history.
 
 Scenarios:
   %s

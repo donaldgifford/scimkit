@@ -18,13 +18,14 @@ func runExercise(ctx context.Context, args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("exercise", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	target := fs.String("target", "", "target SCIM base URL (required)")
-	token := fs.String("token", "", "bearer token")
+	token := fs.String("token", "", "bearer token (default $"+tokenEnv+")")
 	scenario := fs.String("scenario", "", "scenario name (required)")
 	report := fs.String("report", "text", "report format: text|json")
 	timeout := fs.Duration("timeout", 30*time.Second, "overall run timeout")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	tok := resolveToken(*token)
 	if *target == "" {
 		return errors.New("scimkit exercise: --target is required")
 	}
@@ -39,7 +40,7 @@ func runExercise(ctx context.Context, args []string, stdout io.Writer) error {
 
 	runCtx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
-	rep, err := scimtest.Simulate(runCtx, *target, *token, sc)
+	rep, err := scimtest.Simulate(runCtx, *target, tok, sc)
 	if err != nil {
 		return err
 	}
