@@ -30,7 +30,11 @@ docz create impl "Your Implementation Title"
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 ## All Implementation Plans
 
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 | ID | Title | Status | Date | Author | Link |
-|----|-------|--------|------|--------|------|
-| IMPL-0001 | scimkit v0 implementation | In Progress | 2026-07-03 | Donald Gifford | [0001-scimkit-v0-implementation.md](0001-scimkit-v0-implementation.md) |
+| --- | --- | --- | --- | --- | --- |
+| IMPL-0001 | scimkit v0 implementation | Completed | 2026-07-03 | Donald Gifford | [0001-scimkit-v0-implementation.md](0001-scimkit-v0-implementation.md) |
+| IMPL-0002 | scimkit v0.2 hardening: phase 7 and the v1 gaps from INV-0001 | Draft | 2026-10-16 | Donald Gifford | [0002-scimkit-v02-hardening-phase-7-and-the-v1-gaps-from-inv-0001.md](0002-scimkit-v02-hardening-phase-7-and-the-v1-gaps-from-inv-0001.md) |
+<!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->
