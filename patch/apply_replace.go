@@ -28,22 +28,22 @@ func (a *applier) applyReplace(op *Op, index int) error {
 	if sub != nil {
 		return a.setTracked(subPathText(op.Path), op.Value)
 	}
-	return a.replaceAttribute(attrPathText(op.Path), attr, op.Value)
+	return a.replaceAttribute(attrPathText(op.Path), attr, op.Value, index)
 }
 
 // replaceAttribute applies whole-attribute replace semantics: arrays are
 // replaced wholesale (an empty array unassigns), complex values merge
 // partially per §3.5.2.3, simple values are set.
-func (a *applier) replaceAttribute(path string, attr *scim.Attribute, v any) error {
+func (a *applier) replaceAttribute(path string, attr *scim.Attribute, v any, index int) error {
 	switch {
 	case attr.MultiValued:
-		coerced, err := a.coerce(path, wrapElements(v))
+		coerced, err := coerceOpValue(attr, wrapElements(v), index)
 		if err != nil {
 			return err
 		}
 		return a.setTracked(path, coerced)
 	case attr.Type == scim.TypeComplex:
-		return a.mergeComplex(path, v)
+		return a.mergeComplex(path, attr, v, index)
 	default:
 		return a.setTracked(path, v)
 	}
@@ -58,7 +58,7 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 			opLabel(index) + ": value filter on non-multi-valued attribute " + attr.Name)
 	}
 	list, _ := a.getList(op.Path)
-	matches, err := a.matchingElements(op.Path, list)
+	matches, err := matchingElements(attr, op.Path, list)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 	out := slices.Clone(list)
 	keep := make(map[int]bool, len(matches))
 	for _, i := range matches {
-		if err := a.checkReplacedElement(op, attr, out[i], mp, index); err != nil {
+		if err := checkReplacedElement(attr, out[i], mp, index); err != nil {
 			return err
 		}
 		elem := make(scim.ComplexValue, len(mp))
@@ -97,7 +97,7 @@ func (a *applier) replaceValuePath(op *Op, attr, sub *scim.Attribute, index int)
 // value — changing or dropping one is a modification of a set immutable
 // value (RFC 7643 §2.2). Removing or adding whole elements stays legal;
 // this binds only when an existing element is substituted in place.
-func (a *applier) checkReplacedElement(op *Op, attr *scim.Attribute, old scim.ComplexValue, mp map[string]any, index int) error {
+func checkReplacedElement(attr *scim.Attribute, old scim.ComplexValue, mp map[string]any, index int) error {
 	for si := range attr.SubAttributes {
 		sub := &attr.SubAttributes[si]
 		if sub.Mutability != scim.MutabilityImmutable {
@@ -112,7 +112,7 @@ func (a *applier) checkReplacedElement(op *Op, attr *scim.Attribute, old scim.Co
 		if !present {
 			return errImmutableSub(sub, index)
 		}
-		coerced, err := a.coerceElemSub(op.Path, sub, raw)
+		coerced, err := coerceOpValue(sub, raw, index)
 		if err != nil {
 			return err
 		}

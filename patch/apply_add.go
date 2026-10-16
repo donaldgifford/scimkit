@@ -3,7 +3,7 @@ package patch
 import (
 	"bytes"
 	"slices"
-	"sort"
+	"strings"
 	"time"
 
 	"github.com/donaldgifford/scimkit/scim"
@@ -28,17 +28,17 @@ func (a *applier) applyAdd(op *Op, index int) error {
 	if sub != nil {
 		return a.setTracked(subPathText(op.Path), op.Value)
 	}
-	return a.addToAttribute(attrPathText(op.Path), attr, op.Value)
+	return a.addToAttribute(attrPathText(op.Path), attr, op.Value, index)
 }
 
 // addToAttribute applies add semantics for one attribute, shared by
 // pathed adds and pathless per-key merges.
-func (a *applier) addToAttribute(path string, attr *scim.Attribute, v any) error {
+func (a *applier) addToAttribute(path string, attr *scim.Attribute, v any, index int) error {
 	switch {
 	case attr.MultiValued:
-		return a.addMulti(path, v)
+		return a.addMulti(path, attr, v, index)
 	case attr.Type == scim.TypeComplex:
-		return a.mergeComplex(path, v)
+		return a.mergeComplex(path, attr, v, index)
 	default:
 		return a.setTracked(path, v)
 	}
@@ -48,8 +48,8 @@ func (a *applier) addToAttribute(path string, attr *scim.Attribute, v any) error
 // empty incoming value must never reach Resource.Set: Set canonicalizes
 // empty to unassigned, which would delete the existing elements instead
 // of no-opping.
-func (a *applier) addMulti(path string, v any) error {
-	incoming, err := a.coerce(path, wrapElements(v))
+func (a *applier) addMulti(path string, attr *scim.Attribute, v any, index int) error {
+	incoming, err := coerceOpValue(attr, wrapElements(v), index)
 	if err != nil {
 		return err
 	}
@@ -79,8 +79,8 @@ func wrapElements(v any) any {
 // mergeComplex partially merges a value into a single-valued complex
 // attribute: named sub-attributes are set, unnamed ones remain. Add and
 // replace share this per §3.5.2.1 and §3.5.2.3.
-func (a *applier) mergeComplex(path string, v any) error {
-	coerced, err := a.coerce(path, v)
+func (a *applier) mergeComplex(path string, attr *scim.Attribute, v any, index int) error {
+	coerced, err := coerceOpValue(attr, v, index)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (a *applier) addValuePath(op *Op, attr, sub *scim.Attribute, index int) err
 			opLabel(index) + ": value filter on non-multi-valued attribute " + attr.Name)
 	}
 	list, _ := a.getList(op.Path)
-	matches, err := a.matchingElements(op.Path, list)
+	matches, err := matchingElements(attr, op.Path, list)
 	if err != nil {
 		return err
 	}
@@ -151,11 +151,11 @@ func (a *applier) writeToElements(
 	for _, i := range matches {
 		elem := cloneElement(out[i])
 		if sub != nil {
-			if err := a.checkElemImmutable(op, sub, elem, op.Value, index); err != nil {
+			if err := checkElemImmutable(sub, elem, op.Value, index); err != nil {
 				return err
 			}
 			elem[scim.FoldName(sub.Name)] = op.Value
-		} else if err := a.mergeElemKeys(op, attr, elem, mp, index); err != nil {
+		} else if err := mergeElemKeys(attr, elem, mp, index); err != nil {
 			return err
 		}
 		out[i] = elem
@@ -167,14 +167,14 @@ func (a *applier) writeToElements(
 
 // mergeElemKeys merges a value object into one existing element with
 // per-key mutability checks.
-func (a *applier) mergeElemKeys(op *Op, attr *scim.Attribute, elem scim.ComplexValue, mp map[string]any, index int) error {
+func mergeElemKeys(attr *scim.Attribute, elem scim.ComplexValue, mp map[string]any, index int) error {
 	for k, v := range mp {
 		subAttr := findAttr(attr.SubAttributes, k)
 		if subAttr != nil {
 			if subAttr.Mutability == scim.MutabilityReadOnly {
 				continue
 			}
-			if err := a.checkElemImmutable(op, subAttr, elem, v, index); err != nil {
+			if err := checkElemImmutable(subAttr, elem, v, index); err != nil {
 				return err
 			}
 		}
@@ -215,7 +215,7 @@ func (a *applier) applyPathlessKey(op *Op, key string, v any, index int) error {
 	}
 	attr := findAttr(a.rt.Schema.Attributes, key)
 	if attr == nil {
-		attr = findAttr(scim.CommonAttributes(), key)
+		attr = findAttr(commonAttrs, key)
 	}
 	if attr == nil {
 		return nil
@@ -242,30 +242,37 @@ func (a *applier) applyPathlessExtension(op *Op, urn string, ext []scim.Attribut
 
 // applyPathlessAttr guards mutability for one pathless-merge key and
 // applies the op's per-attribute semantics: add merges (§3.5.2.1),
-// replace overwrites whole attributes (§3.5.2.3).
+// replace overwrites whole attributes (§3.5.2.3). An assigned immutable
+// attribute accepts only a value that leaves it unchanged.
 func (a *applier) applyPathlessAttr(op *Op, path string, attr *scim.Attribute, v any, index int) error {
 	if attr.Mutability == scim.MutabilityReadOnly {
 		return nil
 	}
 	if attr.Mutability == scim.MutabilityImmutable {
-		if _, assigned := a.res.Get(path); assigned {
-			return scim.ErrMutability(
-				opLabel(index) + ": attribute " + attr.Name + " is immutable and already assigned")
+		if err := a.checkImmutableAttr(path, attr, op.Kind, v, index); err != nil {
+			return err
 		}
 	}
 	if op.Kind == KindReplace {
-		return a.replaceAttribute(path, attr, v)
+		return a.replaceAttribute(path, attr, v, index)
 	}
-	return a.addToAttribute(path, attr, v)
+	return a.addToAttribute(path, attr, v, index)
 }
 
+// sortedKeys returns the map's keys in folded order so multi-key
+// failures are deterministic.
 func sortedKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return scim.FoldName(keys[i]) < scim.FoldName(keys[j]) })
+	slices.SortFunc(keys, compareFolded)
 	return keys
+}
+
+// compareFolded orders strings by their case-folded form.
+func compareFolded(a, b string) int {
+	return strings.Compare(scim.FoldName(a), scim.FoldName(b))
 }
 
 // cloneElement shallow-copies one stored element before modification;

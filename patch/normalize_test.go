@@ -140,6 +140,23 @@ func TestExpandPathlessReplace(t *testing.T) {
 			want: []Op{{Kind: KindReplace, Value: map[string]any{"displayName": "Babs"}}},
 		},
 		{
+			name: "colon without urn prefix stays a plain unknown key",
+			body: patchBody(`[{"op": "replace", "value": {"foo:bar": 1, "displayName": "Babs"}}]`),
+			want: []Op{{Kind: KindReplace, Value: map[string]any{"foo:bar": json.Number("1"), "displayName": "Babs"}}},
+		},
+		{
+			name: "urn prefix folds case",
+			body: patchBody(`[{"op": "replace", "value": {
+				"URN:ietf:params:scim:schemas:extension:enterprise:2.0:User:department": "Tour"
+			}}]`),
+			want: []Op{
+				{Kind: KindReplace, Path: &filter.Path{
+					URN:  "URN:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+					Attr: "department",
+				}, Value: "Tour"},
+			},
+		},
+		{
 			name:     "expanded key with bad path grammar is invalidPath",
 			body:     patchBody(`[{"op": "replace", "value": {"name..givenName": "x"}}]`),
 			wantType: scim.ScimTypeInvalidPath,

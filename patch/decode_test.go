@@ -2,6 +2,8 @@ package patch
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,6 +109,93 @@ func TestDecode(t *testing.T) {
 			got, err := Decode([]byte(tt.body), &rt, Profile{})
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDecodeMaxOperations pins the Operations bound exactly at
+// MaxOperations.
+func TestDecodeMaxOperations(t *testing.T) {
+	rt := scim.UserResourceType()
+	tests := []struct {
+		name     string
+		count    int
+		wantType string
+	}{
+		{name: "at the bound", count: MaxOperations},
+		{name: "one over", count: MaxOperations + 1, wantType: scim.ScimTypeInvalidSyntax},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			op := `{"op": "replace", "path": "title", "value": "x"}`
+			ops := make([]string, tt.count)
+			for i := range ops {
+				ops[i] = op
+			}
+			body := patchBody(`[` + strings.Join(ops, ",") + `]`)
+			got, err := Decode([]byte(body), &rt, Strict)
+			if tt.wantType != "" {
+				requireScimType(t, err, tt.wantType)
+				require.ErrorContains(t, err, strconv.Itoa(MaxOperations))
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, got, tt.count)
+		})
+	}
+}
+
+// TestDecodeLenientPaths pins that LenientPaths is the only way a
+// lenient value-filter shape reaches ParsePath, and that it changes
+// nothing else.
+func TestDecodeLenientPaths(t *testing.T) {
+	rt := scim.UserResourceType()
+	tests := []struct {
+		name     string
+		profile  Profile
+		body     string
+		wantType string
+	}{
+		{
+			name:    "bare not operand accepted under LenientPaths",
+			profile: Profile{LenientPaths: true},
+			body:    patchBody(`[{"op": "remove", "path": "emails[not type eq \"work\"]"}]`),
+		},
+		{
+			name:     "bare not operand rejected by Strict",
+			profile:  Strict,
+			body:     patchBody(`[{"op": "remove", "path": "emails[not type eq \"work\"]"}]`),
+			wantType: scim.ScimTypeInvalidPath,
+		},
+		{
+			name:     "bare not operand rejected by Default",
+			profile:  Default,
+			body:     patchBody(`[{"op": "remove", "path": "emails[not type eq \"work\"]"}]`),
+			wantType: scim.ScimTypeInvalidPath,
+		},
+		{
+			name:     "malformed path still invalidPath under LenientPaths",
+			profile:  Profile{LenientPaths: true},
+			body:     patchBody(`[{"op": "remove", "path": "emails["}]`),
+			wantType: scim.ScimTypeInvalidPath,
+		},
+		{
+			name:     "nested value filter still invalidPath under LenientPaths",
+			profile:  Profile{LenientPaths: true},
+			body:     patchBody(`[{"op": "remove", "path": "emails[emails[type pr]]"}]`),
+			wantType: scim.ScimTypeInvalidPath,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Decode([]byte(tt.body), &rt, tt.profile)
+			if tt.wantType != "" {
+				requireScimType(t, err, tt.wantType)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, `emails[not (type eq "work")]`, got[0].Path.String(), "rendering is always strict grammar")
 		})
 	}
 }

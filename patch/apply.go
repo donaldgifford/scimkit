@@ -13,11 +13,15 @@ import (
 // untouched. Result.Changed reports whether anything actually changed,
 // so idempotent PatchOps can skip meta.version bumps.
 //
-// The engine mutates only through Resource.Get/Set/Unassign — that is
-// what keeps the presence-tracking invariants (empty values are never
-// stored, extension schemas stay derived) holding for free.
+// The engine mutates only through Resource.Get/Set/Unassign and never
+// edits a stored value in place (elements are copied before they are
+// changed) — that is what keeps the presence-tracking invariants (empty
+// values are never stored, extension schemas stay derived) holding for
+// free, and what lets the working copy be a CloneShared rather than a
+// full Clone: a one-member removal from a 5 000-member group copies the
+// containers, not every element.
 func Apply(res *scim.Resource, ops []Op, p Profile) (Result, error) {
-	a := &applier{res: res.Clone(), rt: res.ResourceType(), profile: p}
+	a := &applier{res: res.CloneShared(), rt: res.ResourceType(), profile: p}
 	for i := range ops {
 		if err := a.apply(&ops[i], i); err != nil {
 			return Result{}, err
@@ -79,11 +83,8 @@ func (a *applier) checkMutable(op *Op, attr, sub *scim.Attribute, index int) err
 	if sub != nil && sub.Mutability == scim.MutabilityReadOnly {
 		return scim.ErrMutability(opLabel(index) + ": sub-attribute " + sub.Name + " is readOnly")
 	}
-	if attr.Mutability == scim.MutabilityImmutable {
-		if _, assigned := a.res.Get(attrPathText(op.Path)); assigned {
-			return scim.ErrMutability(
-				opLabel(index) + ": attribute " + attr.Name + " is immutable and already assigned")
-		}
+	if err := a.checkImmutablePathed(op, attr, sub, index); err != nil {
+		return err
 	}
 	if err := a.checkImmutableSubPath(op, sub, index); err != nil {
 		return err
@@ -92,6 +93,81 @@ func (a *applier) checkMutable(op *Op, attr, sub *scim.Attribute, index int) err
 		return scim.ErrMutability(opLabel(index) + ": cannot remove required attribute " + attr.Name)
 	}
 	return nil
+}
+
+// checkImmutablePathed guards a pathed op on an immutable top-level
+// attribute. A write below the attribute (sub-attribute or value
+// filter) cannot leave an assigned immutable value untouched, so it is
+// rejected outright once assigned; a whole-attribute write gets the
+// match-or-error treatment.
+func (a *applier) checkImmutablePathed(op *Op, attr, sub *scim.Attribute, index int) error {
+	if attr.Mutability != scim.MutabilityImmutable {
+		return nil
+	}
+	path := attrPathText(op.Path)
+	if sub == nil && op.Path.ValueFilter == nil {
+		return a.checkImmutableAttr(path, attr, op.Kind, op.Value, index)
+	}
+	if _, assigned := a.res.Get(path); assigned {
+		return errImmutableAttr(attr, index)
+	}
+	return nil
+}
+
+// checkImmutableAttr applies RFC 7643 §2.2 match-or-error to a
+// whole-attribute write on an immutable attribute: while unassigned any
+// value is legal, once assigned a remove is a modification and an add or
+// replace may only carry a value that leaves the attribute unchanged
+// (the op then completes as a Changed=false no-op). Shared by pathed ops
+// and the pathless merge, hence the path string rather than an Op.
+func (a *applier) checkImmutableAttr(path string, attr *scim.Attribute, kind Kind, raw any, index int) error {
+	existing, assigned := a.res.Get(path)
+	if !assigned {
+		return nil
+	}
+	if kind == KindRemove {
+		return errImmutableAttr(attr, index)
+	}
+	incoming, err := coerceOpValue(attr, raw, index)
+	if err != nil {
+		return err
+	}
+	if wouldChange(attr, kind, existing, incoming) {
+		return errImmutableAttr(attr, index)
+	}
+	return nil
+}
+
+// wouldChange reports whether applying kind with the coerced incoming
+// value to an attribute currently holding existing would alter it,
+// mirroring the add/replace tables: multi-valued add appends what is
+// not already present, single-valued complex writes merge per
+// sub-attribute, everything else substitutes.
+func wouldChange(attr *scim.Attribute, kind Kind, existing, incoming any) bool {
+	if incoming == nil {
+		// nil, [] and {} canonicalize to unassigned: an add contributes
+		// nothing, a replace would unassign.
+		return kind == KindReplace
+	}
+	if attr.MultiValued && kind == KindAdd {
+		_, added := appendNew(existing, incoming)
+		return added
+	}
+	current, isComplex := existing.(scim.ComplexValue)
+	inc, incIsComplex := incoming.(scim.ComplexValue)
+	if attr.Type == scim.TypeComplex && !attr.MultiValued && isComplex && incIsComplex {
+		merged := cloneElement(current)
+		for k, sv := range inc {
+			merged[k] = sv
+		}
+		return !valuesEqual(existing, merged)
+	}
+	return !valuesEqual(existing, incoming)
+}
+
+func errImmutableAttr(attr *scim.Attribute, index int) *scim.Error {
+	return scim.ErrMutability(
+		opLabel(index) + ": attribute " + attr.Name + " is immutable and already assigned")
 }
 
 // checkImmutableSubPath guards a dotted path naming an immutable
@@ -109,7 +185,7 @@ func (a *applier) checkImmutableSubPath(op *Op, sub *scim.Attribute, index int) 
 	if op.Kind == KindRemove {
 		return errImmutableSub(sub, index)
 	}
-	coerced, err := a.coerce(subPathText(op.Path), op.Value)
+	coerced, err := coerceOpValue(sub, op.Value, index)
 	if err != nil {
 		return err
 	}
@@ -122,7 +198,7 @@ func (a *applier) checkImmutableSubPath(op *Op, sub *scim.Attribute, index int) 
 // checkElemImmutable rejects writing a different value to an immutable
 // sub-attribute already assigned on one element; re-sending the
 // identical value stays a legal no-op.
-func (a *applier) checkElemImmutable(op *Op, sub *scim.Attribute, elem scim.ComplexValue, raw any, index int) error {
+func checkElemImmutable(sub *scim.Attribute, elem scim.ComplexValue, raw any, index int) error {
 	if sub.Mutability != scim.MutabilityImmutable {
 		return nil
 	}
@@ -130,7 +206,7 @@ func (a *applier) checkElemImmutable(op *Op, sub *scim.Attribute, elem scim.Comp
 	if !assigned || existing == nil {
 		return nil
 	}
-	coerced, err := a.coerceElemSub(op.Path, sub, raw)
+	coerced, err := coerceOpValue(sub, raw, index)
 	if err != nil {
 		return err
 	}
@@ -145,21 +221,17 @@ func errImmutableSub(sub *scim.Attribute, index int) *scim.Error {
 		opLabel(index) + ": sub-attribute " + sub.Name + " is immutable and already assigned")
 }
 
-// coerceElemSub coerces one sub-attribute value to its stored form
-// through a scratch element of the attribute at p.
-func (a *applier) coerceElemSub(p *filter.Path, sub *scim.Attribute, raw any) (any, error) {
-	scratch := scim.NewResource(a.rt)
-	key := scim.FoldName(sub.Name)
-	elem := scim.ComplexValue{key: raw}
-	if err := scratch.Set(attrPathText(p), scim.MultiComplexValue{elem}); err != nil {
-		return nil, err
+// coerceOpValue converts a decoded op value to the attribute's stored
+// form so the engine compares and merges in stored forms only. A nil
+// result means the value canonicalizes to unassigned (nil, empty array,
+// empty object). Failures are invalidValue, as Resource.Set reports
+// them.
+func coerceOpValue(attr *scim.Attribute, v any, index int) (any, error) {
+	cv, err := scim.Coerce(attr, v)
+	if err != nil {
+		return nil, scim.ErrInvalidValue(opLabel(index) + ": attribute " + attr.Name + ": " + err.Error())
 	}
-	v, _ := scratch.Get(attrPathText(p))
-	mcv, ok := v.(scim.MultiComplexValue)
-	if !ok || len(mcv) == 0 {
-		return nil, nil //nolint:nilnil // nil value with nil error means the raw value canonicalizes to unassigned (RFC 7643 §2.5)
-	}
-	return mcv[0][key], nil
+	return cv, nil
 }
 
 // setTracked writes through Resource.Set and folds before/after change
@@ -174,19 +246,6 @@ func (a *applier) setTracked(path string, v any) error {
 		a.changed = true
 	}
 	return nil
-}
-
-// coerce round-trips a decoded value through a scratch resource so the
-// engine can compare and merge in stored forms only. A nil result means
-// the value canonicalizes to unassigned (nil, empty array, empty
-// object).
-func (a *applier) coerce(path string, v any) (any, error) {
-	scratch := scim.NewResource(a.rt)
-	if err := scratch.Set(path, v); err != nil {
-		return nil, err
-	}
-	got, _ := scratch.Get(path)
-	return got, nil
 }
 
 // attrPathText renders the Resource path for a filter.Path's top-level
@@ -208,21 +267,14 @@ func subPathText(p *filter.Path) string {
 }
 
 // matchingElements returns the indexes of list elements satisfying the
-// path's value filter, by probing each element alone through
-// filter.Match — per-element correlation with the exact Table 3
-// semantics the filter package already implements.
-func (a *applier) matchingElements(p *filter.Path, list scim.MultiComplexValue) ([]int, error) {
-	probe := scim.NewResource(a.rt)
-	expr := filter.ValuePath{
-		Path:   filter.Path{URN: p.URN, Attr: p.Attr},
-		Filter: p.ValueFilter,
-	}
+// path's value filter, evaluating the filter against each element in
+// place through filter.MatchElement — per-element correlation with the
+// exact Table 3 semantics the filter package implements, without
+// building a probe resource per element.
+func matchingElements(attr *scim.Attribute, p *filter.Path, list scim.MultiComplexValue) ([]int, error) {
 	var idx []int
 	for i := range list {
-		if err := probe.Set(attrPathText(p), scim.MultiComplexValue{list[i]}); err != nil {
-			return nil, err
-		}
-		ok, err := filter.Match(probe, expr)
+		ok, err := filter.MatchElement(attr, list[i], p.ValueFilter)
 		if err != nil {
 			return nil, err
 		}

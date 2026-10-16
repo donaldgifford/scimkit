@@ -85,3 +85,22 @@ func TestProfileDecodeContrast(t *testing.T) {
 		})
 	}
 }
+
+// TestProfileLenientPathsOff pins that no built-in profile relaxes the
+// PATCH path grammar: lenient paths are an explicit opt-in.
+func TestProfileLenientPathsOff(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile Profile
+	}{
+		{name: "strict", profile: Strict},
+		{name: "default", profile: Default},
+		{name: "entra", profile: Entra},
+		{name: "okta", profile: Okta},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.False(t, tt.profile.LenientPaths)
+		})
+	}
+}

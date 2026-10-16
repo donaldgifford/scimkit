@@ -9,16 +9,26 @@ import (
 	"github.com/donaldgifford/scimkit/scim"
 )
 
+// MaxOperations bounds the Operations array Decode accepts. RFC 7644
+// sets no limit, but a PatchOp is applied atomically in memory, so an
+// unbounded array is a trivial resource-exhaustion vector; the largest
+// documented IdP batches (Entra group membership syncs) stay in the low
+// hundreds. Bodies over the bound fail with ErrInvalidSyntax before any
+// operation is parsed.
+const MaxOperations = 1000
+
 // Decode parses a PatchOp message body (RFC 7644 §3.5.2) into normalized
 // operations. The envelope must carry the PatchOp schema URN and a
-// non-empty Operations array; each operation is shape-checked (op value,
-// path grammar, value presence per kind) and its path parsed with
-// filter.ParsePath. Normalization per the Profile happens between those
-// steps: knobs that rewrite raw shapes run before path parsing, knobs
-// that need the target attribute's schema type run after, resolved
-// against rt. Errors are *scim.Error values: ErrInvalidSyntax for
-// envelope and op-shape violations, ErrInvalidPath for path grammar
-// violations, ErrInvalidValue for missing or kind-incompatible values.
+// non-empty Operations array of at most MaxOperations elements; each
+// operation is shape-checked (op value, path grammar, value presence per
+// kind) and its path parsed with filter.ParsePath (under filter.Lenient
+// when the Profile sets LenientPaths). Normalization per the Profile
+// happens between those steps: knobs that rewrite raw shapes run before
+// path parsing, knobs that need the target attribute's schema type run
+// after, resolved against rt. Errors are *scim.Error values:
+// ErrInvalidSyntax for envelope and op-shape violations, ErrInvalidPath
+// for path grammar violations, ErrInvalidValue for missing or
+// kind-incompatible values.
 func Decode(body []byte, rt *scim.ResourceType, p Profile) ([]Op, error) {
 	raws, err := parseEnvelope(body)
 	if err != nil {
@@ -93,6 +103,11 @@ func parseEnvelope(body []byte) ([]rawOp, error) {
 	}
 	if len(list) == 0 {
 		return nil, scim.ErrInvalidSyntax("Operations must not be empty")
+	}
+	if len(list) > MaxOperations {
+		return nil, scim.ErrInvalidSyntax(
+			"Operations has " + strconv.Itoa(len(list)) + " elements, more than the " +
+				strconv.Itoa(MaxOperations) + " allowed")
 	}
 	out := make([]rawOp, 0, len(list))
 	for i, elem := range list {
@@ -182,7 +197,7 @@ func buildOp(ro *rawOp, index int, p Profile) (Op, error) {
 	}
 	op := Op{Kind: kind}
 	if ro.hasPath {
-		parsed, err := filter.ParsePath(ro.path)
+		parsed, err := filter.ParsePath(ro.path, pathOptions(p)...)
 		if err != nil {
 			return Op{}, err
 		}
@@ -208,6 +223,15 @@ func buildOp(ro *rawOp, index int, p Profile) (Op, error) {
 		}
 	}
 	return op, nil
+}
+
+// pathOptions maps the Profile's path-grammar knobs onto filter.ParsePath
+// options.
+func pathOptions(p Profile) []filter.ParseOption {
+	if p.LenientPaths {
+		return []filter.ParseOption{filter.Lenient()}
+	}
+	return nil
 }
 
 // opKind validates the wire op value, exact lowercase per RFC 7644
