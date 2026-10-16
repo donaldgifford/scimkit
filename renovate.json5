@@ -7,4 +7,14 @@
     "github>donaldgifford/renovate-config:mise",
     "github>donaldgifford/renovate-config:ci",
   ],
+  packageRules: [
+    {
+      // go.mod's `go` directive is the consumer floor (DESIGN-0001 Q6);
+      // raise it deliberately. The `toolchain` line is still updated.
+      description: "Never auto-bump the go.mod go directive",
+      matchManagers: ["gomod"],
+      matchDepTypes: ["golang"],
+      enabled: false,
+    },
+  ],
 }

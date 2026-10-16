@@ -34,6 +34,13 @@ func (sr *statusRecorder) WriteHeader(status int) {
 	sr.ResponseWriter.WriteHeader(status)
 }
 
+// Unwrap exposes the underlying writer so http.ResponseController (and
+// any consumer middleware that unwraps) reaches Flush, Hijack, and the
+// deadline setters through the logging layer.
+func (sr *statusRecorder) Unwrap() http.ResponseWriter {
+	return sr.ResponseWriter
+}
+
 // withLogging emits one structured log line per request.
 func withLogging(next http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

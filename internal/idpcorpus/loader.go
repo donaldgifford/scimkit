@@ -6,12 +6,13 @@
 package idpcorpus
 
 import (
+	"cmp"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -93,11 +94,8 @@ func All() ([]Fixture, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Provider != out[j].Provider {
-			return out[i].Provider < out[j].Provider
-		}
-		return out[i].Name < out[j].Name
+	slices.SortFunc(out, func(a, b Fixture) int {
+		return cmp.Or(strings.Compare(a.Provider, b.Provider), strings.Compare(a.Name, b.Name))
 	})
 	return out, nil
 }

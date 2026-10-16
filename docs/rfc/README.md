@@ -29,4 +29,11 @@ docz create rfc "Your RFC Title"
 - **Superseded**: Replaced by another RFC
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All RFCs
+
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
+| ID | Title | Status | Date | Author | Link |
+| --- | --- | --- | --- | --- | --- |
+<!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->

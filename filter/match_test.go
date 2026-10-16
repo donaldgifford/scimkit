@@ -250,6 +250,102 @@ func TestMatchInvalidFilterErrors(t *testing.T) {
 	}
 }
 
+// TestMatchNestedValuePathRejected pins that a hand-built AST nesting a
+// ValuePath inside a valuePath filter (a shape the parser refuses) is an
+// invalidFilter error from Match and MatchElement alike, never a silent
+// false.
+func TestMatchNestedValuePathRejected(t *testing.T) {
+	res := matchUser(t)
+	emails := scim.FindAttribute(res.ResourceType().Schema.Attributes, "emails")
+	nested := ValuePath{
+		Path:   Path{Attr: "emails"},
+		Filter: ValuePath{Path: Path{Attr: "type"}, Filter: Present{Path: Path{Attr: "value"}}},
+	}
+	tests := []struct {
+		name string
+		run  func() (bool, error)
+	}{
+		{name: "Match", run: func() (bool, error) { return Match(res, nested) }},
+		{
+			name: "MatchElement",
+			run: func() (bool, error) {
+				return MatchElement(emails, scim.ComplexValue{"type": "work"}, nested.Filter)
+			},
+		},
+		{
+			name: "MatchElement under logic",
+			run: func() (bool, error) {
+				return MatchElement(emails, scim.ComplexValue{"type": "work"}, AndExpr{
+					L: Present{Path: Path{Attr: "type"}},
+					R: nested.Filter,
+				})
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.run()
+			require.ErrorIs(t, err, scim.ErrInvalidFilter(""))
+			require.ErrorContains(t, err, "nested inside a value filter")
+			assert.False(t, got)
+		})
+	}
+}
+
+// TestMatchElement pins the per-element primitive against one email
+// element, including the caseExact, type-mismatch, and undefined
+// sub-attribute behaviors it shares with Match.
+func TestMatchElement(t *testing.T) {
+	res := matchUser(t)
+	emails := scim.FindAttribute(res.ResourceType().Schema.Attributes, "emails")
+	work := scim.ComplexValue{"value": "bjensen@example.com", "type": "work", "primary": true}
+	tests := []struct {
+		name    string
+		elem    scim.ComplexValue
+		filter  string
+		want    bool
+		wantErr string
+	}{
+		{name: "eq on value", elem: work, filter: `value eq "bjensen@example.com"`, want: true},
+		{name: "eq folds case for non-caseExact", elem: work, filter: `VALUE eq "BJENSEN@EXAMPLE.COM"`, want: true},
+		{name: "co", elem: work, filter: `value co "example.com"`, want: true},
+		{name: "and across sub-attributes", elem: work, filter: `type eq "work" and primary eq true`, want: true},
+		{name: "or with one false branch", elem: work, filter: `type eq "home" or primary eq true`, want: true},
+		{name: "not", elem: work, filter: `not (type eq "work")`, want: false},
+		{name: "pr on assigned", elem: work, filter: `primary pr`, want: true},
+		{name: "pr on unassigned", elem: work, filter: `display pr`, want: false},
+		{name: "eq null matches unassigned", elem: work, filter: `display eq null`, want: true},
+		{name: "undefined sub-attribute is no-value", elem: work, filter: `nope eq "x"`, want: false},
+		{name: "type mismatch is non-match", elem: work, filter: `primary eq "true"`, want: false},
+		{name: "nil element", elem: nil, filter: `value eq "x"`, want: false},
+		{name: "sub-attribute path inside element is undefined", elem: work, filter: `value.x eq "a"`, want: false},
+		{name: "ordering on boolean is invalid", elem: work, filter: `primary gt false`, wantErr: "ordering operator"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, err := Parse(tt.filter)
+			require.NoError(t, err)
+			got, err := MatchElement(emails, tt.elem, e)
+			if tt.wantErr != "" {
+				require.ErrorIs(t, err, scim.ErrInvalidFilter(""))
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+			// Match on the whole resource agrees whenever the element is
+			// one of its stored emails.
+			if tt.elem != nil {
+				whole, err := Match(res, ValuePath{Path: Path{Attr: "emails"}, Filter: e})
+				require.NoError(t, err)
+				if tt.want {
+					assert.True(t, whole)
+				}
+			}
+		})
+	}
+}
+
 // TestMatchValuePathOnSingleComplex pins the one-element-list behavior for
 // valuePath against a single-valued complex attribute.
 func TestMatchValuePathOnSingleComplex(t *testing.T) {

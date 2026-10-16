@@ -273,3 +273,34 @@ func TestGroupFromResourceRejectsWrongSchema(t *testing.T) {
 	_, err := GroupFromResource(NewResource(&rt))
 	require.ErrorContains(t, err, "want")
 }
+
+// TestTypedViewsShareResourceType pins that conversions reuse one built-in
+// ResourceType per kind and that it matches the public constructor.
+func TestTypedViewsShareResourceType(t *testing.T) {
+	tests := []struct {
+		name    string
+		convert func() (*Resource, error)
+		want    ResourceType
+	}{
+		{
+			name:    "user",
+			convert: func() (*Resource, error) { return (&User{UserName: "b"}).Resource() },
+			want:    UserResourceType(),
+		},
+		{
+			name:    "group",
+			convert: func() (*Resource, error) { return (&Group{DisplayName: "g"}).Resource() },
+			want:    GroupResourceType(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first, err := tt.convert()
+			require.NoError(t, err)
+			second, err := tt.convert()
+			require.NoError(t, err)
+			assert.Same(t, first.ResourceType(), second.ResourceType())
+			assert.Equal(t, tt.want, *first.ResourceType())
+		})
+	}
+}

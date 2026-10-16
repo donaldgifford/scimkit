@@ -33,7 +33,7 @@ func (s *Store) Create(_ context.Context, res *scim.Resource) (*scim.Resource, e
 		return nil, err
 	}
 	s.bumpVersion(idStr, stored)
-	s.items[idStr] = stored
+	s.insert(idStr, stored)
 	s.reindex(idStr, nil, stored)
 	return stored.Clone(), nil
 }
@@ -52,7 +52,9 @@ func (s *Store) Get(_ context.Context, id string) (*scim.Resource, error) {
 // Replace swaps the stored resource. The incoming resource's
 // meta.version is a compare-and-swap token: when set, a mismatch with
 // the stored version fails with scim.ErrPreconditionFailed; the store
-// bumps the version itself on success.
+// bumps the version itself on success. Tokens compare weakly — W/"3",
+// "3", and 3 are the same version — since clients echo whichever form
+// they were handed.
 func (s *Store) Replace(_ context.Context, id string, res *scim.Resource) (*scim.Resource, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -60,7 +62,7 @@ func (s *Store) Replace(_ context.Context, id string, res *scim.Resource) (*scim
 	if !ok {
 		return nil, scim.ErrNotFound("resource " + id + " not found")
 	}
-	if token := res.Meta().Version; token != "" && token != cur.Meta().Version {
+	if !versionMatches(res.Meta().Version, cur.Meta().Version) {
 		return nil, scim.ErrPreconditionFailed("version mismatch for resource " + id)
 	}
 	stored := res.Clone()
@@ -85,7 +87,6 @@ func (s *Store) Delete(_ context.Context, id string) error {
 		return scim.ErrNotFound("resource " + id + " not found")
 	}
 	s.reindex(id, cur, nil)
-	delete(s.items, id)
-	delete(s.seq, id)
+	s.remove(id)
 	return nil
 }

@@ -98,12 +98,35 @@ func (r *Resource) SetMeta(m Meta) {
 
 // Get returns the stored value at path and whether the attribute is
 // assigned. Paths use standard attribute notation, matched
-// case-insensitively. Unresolvable paths report unassigned.
+// case-insensitively. Unknown paths read as unassigned: a path that does
+// not resolve against the resource type (misspelled attribute, undeclared
+// extension URN, sub-attribute on a non-complex attribute) returns
+// (nil, false) exactly like an unassigned attribute. Use Lookup to tell
+// the two apart.
 func (r *Resource) Get(path string) (any, bool) {
 	rp, err := resolvePath(r.rt, path)
 	if err != nil {
 		return nil, false
 	}
+	return r.get(rp)
+}
+
+// Lookup is Get with the path error surfaced: it returns ErrInvalidPath
+// when path does not resolve against the resource type, and otherwise the
+// stored value and whether the attribute is assigned. Callers validating
+// client-supplied paths (projection parameters, sort keys) need the
+// distinction Get deliberately collapses.
+func (r *Resource) Lookup(path string) (any, bool, error) {
+	rp, err := resolvePath(r.rt, path)
+	if err != nil {
+		return nil, false, err
+	}
+	v, ok := r.get(rp)
+	return v, ok, nil
+}
+
+// get reads a resolved path out of the container.
+func (r *Resource) get(rp resolvedPath) (any, bool) {
 	if rp.common {
 		return r.getCommon(rp)
 	}
@@ -341,6 +364,39 @@ func (r *Resource) Unassign(path string) error {
 // Clone returns a deep copy sharing only the (immutable) ResourceType.
 func (r *Resource) Clone() *Resource {
 	return &Resource{rt: r.rt, attrs: cloneStringMap(r.attrs), meta: r.meta}
+}
+
+// CloneShared returns a copy whose attribute containers are independent
+// of r but whose leaf values are shared: the top-level container, each
+// extension container, and each single-valued complex value are copied,
+// while multi-valued values and binary values are referenced, not
+// duplicated. Those are exactly the structures Set edits in place versus
+// replaces wholesale, so Set/Unassign on either resource never affects
+// the other. The two stay independent as long as no caller mutates a
+// value obtained from Get, which the Get contract already forbids. It is
+// the clone for engines that write only through Set and treat stored
+// values as read-only (the PATCH applier): Clone would copy every element
+// of a large multi-valued attribute to change one.
+func (r *Resource) CloneShared() *Resource {
+	return &Resource{rt: r.rt, attrs: cloneContainer(r.attrs), meta: r.meta}
+}
+
+// cloneContainer copies one attribute container, recursing into
+// extension containers and single-valued complex values and sharing
+// every other stored value.
+func cloneContainer(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		switch t := v.(type) {
+		case map[string]any:
+			out[k] = cloneContainer(t)
+		case ComplexValue:
+			out[k] = ComplexValue(cloneContainer(t))
+		default:
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func cloneStringMap(m map[string]any) map[string]any {

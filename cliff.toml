@@ -8,6 +8,7 @@ header = """
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+
 """
 
 body = """
@@ -63,7 +64,7 @@ commit_parsers = [
   { message = "^chore\\(deps.*\\)", skip = true },
   { message = "^chore\\(pr\\)", skip = true },
   { message = "^chore\\(pull\\)", skip = true },
-  { message = "^chore.*[Cc]hangelog", skip = true },
+  { message = "(?i)^chore.*changelog", skip = true },
   { message = "^chore|^ci|^build", group = "<!-- 7 -->Miscellaneous Tasks" },
   { body = ".*security", group = "<!-- 8 -->Security" },
   { message = "^revert", group = "<!-- 9 -->Revert" },

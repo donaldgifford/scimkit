@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0001
 title: "scimkit library architecture"
-status: In Review
+status: Implemented
 author: Donald Gifford
 created: 2026-07-02
 ---
@@ -14,6 +14,8 @@ created: 2026-07-02
 **Date:** 2026-07-02
 
 <!--toc:start-->
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 - [Overview](#overview)
 - [Goals and Non-Goals](#goals-and-non-goals)
   - [Goals](#goals)
@@ -43,6 +45,7 @@ created: 2026-07-02
   - [Q7 — Mock binary shape?](#q7--mock-binary-shape)
   - [Q8 — Dependency policy details?](#q8--dependency-policy-details)
 - [References](#references)
+<!-- markdownlint-restore -->
 <!--toc:end-->
 
 ## Overview
@@ -107,7 +110,7 @@ public API shape, and the rollout plan for v0.
 Research across the Go SCIM ecosystem (July 2026) found:
 
 | Library | Role | State |
-|---|---|---|
+| --- | --- | --- |
 | `elimity-com/scim` | server | De-facto standard (~241★) but no tagged releases; PATCH is parsed, **never applied**; filters validated, **never evaluated**; `map[string]interface{}` models; no sort/bulk/ETag; no client. |
 | `scim2/filter-parser` | filter AST | Healthy, small, correct — but parse-only. No evaluator, no builder. |
 | `imulab/go-scim` | server toolkit | The only lib that implements PATCH-apply and filter-eval, but dormant since 2020 and built on a heavy property-tree/Navigator model users found painful. |
@@ -617,7 +620,7 @@ seam.
 All new surface — summarized here for review; sketches above are normative:
 
 | Package | Key exports |
-|---|---|
+| --- | --- |
 | `scim` | `Resource`, `User`/`Group`/`EnterpriseUser` + conversions, `Schema`/`Attribute`/`ResourceType` + built-ins, `Error` + constructors, URN constants, `Meta`, `MultiValue`, `ListResponse` |
 | `filter` | `Parse`, `ParsePath`, `Lenient`, `Expr` AST (`Compare`, `Present`, `AndExpr`, `OrExpr`, `NotExpr`, `ValuePath`), `Path`, `Match`, builder (`Eq`, `And`, `Not`, `HasValue`, …) |
 | `patch` | `Decode`, `Apply`, `EncodeOps`, `Op`, `Result`, `Profile` (`Strict`/`Default`/`Entra`/`Okta`) |
@@ -689,7 +692,7 @@ v1). Later phases depend on earlier ones; within a phase, work is
 parallelizable.
 
 | Phase | Deliverable | Notes |
-|---|---|---|
+| --- | --- | --- |
 | 0 | Repo prep | Package dirs, rewrite `CLAUDE.md`/`README` for library shape (removing Forgejo/binary leftovers), retire `internal/.gitkeep`, keep docker plumbing aimed at the CLI |
 | 1 | `scim` core | Schemas + registry (Go values generated from embedded RFC 7643 §8.7 JSON), `Resource`, codec, errors, hand-written typed `User`/`Group`/`EnterpriseUser` |
 | 2 | `filter` | Parser + evaluator + builder, fuzz targets |

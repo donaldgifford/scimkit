@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -35,8 +37,31 @@ type AuthScheme struct {
 // (RFC 6750): verify receives the token from the Authorization header and
 // returns nil to admit the request. Missing or rejected credentials are
 // answered with a SCIM 401 body and a WWW-Authenticate challenge.
+//
+// verify sees the raw presented token. When it compares against a known
+// secret it must do so in constant time (crypto/subtle) so response
+// timing does not leak the secret byte by byte; StaticBearerToken does
+// exactly that for the single-shared-secret case.
 func BearerToken(verify func(ctx context.Context, token string) error) Auth {
 	return &bearerAuth{verify: verify, logger: slog.Default()}
+}
+
+// errTokenMismatch is the rejection StaticBearerToken's verify returns;
+// it never reaches the wire, which only ever sees the generic 401.
+var errTokenMismatch = errors.New("server: bearer token mismatch")
+
+// StaticBearerToken admits requests presenting exactly token, compared in
+// constant time. It is the right Auth for a single IdP tenant holding one
+// shared secret; an empty token rejects every request rather than
+// admitting all of them.
+func StaticBearerToken(token string) Auth {
+	want := []byte(token)
+	return BearerToken(func(_ context.Context, got string) error {
+		if len(want) == 0 || subtle.ConstantTimeCompare([]byte(got), want) != 1 {
+			return errTokenMismatch
+		}
+		return nil
+	})
 }
 
 type bearerAuth struct {

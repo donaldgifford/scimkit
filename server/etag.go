@@ -45,7 +45,7 @@ func etagMatch(header, tag string) bool {
 	if strings.TrimSpace(header) == "*" {
 		return true
 	}
-	for _, candidate := range strings.Split(header, ",") {
+	for candidate := range strings.SplitSeq(header, ",") {
 		if opaqueTag(candidate) == opaqueTag(tag) {
 			return true
 		}

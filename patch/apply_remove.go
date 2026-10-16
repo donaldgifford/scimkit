@@ -44,7 +44,7 @@ func (a *applier) removeValuePath(op *Op, attr, sub *scim.Attribute, index int) 
 	if !assigned {
 		return nil
 	}
-	matches, err := a.matchingElements(op.Path, list)
+	matches, err := matchingElements(attr, op.Path, list)
 	if err != nil {
 		return err
 	}

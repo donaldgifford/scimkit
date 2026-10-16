@@ -283,3 +283,201 @@ func TestApplyImmutableMatrix(t *testing.T) {
 		})
 	}
 }
+
+// immutableType extends applyType with immutable multi-valued and
+// complex attributes so match-or-error can be pinned per shape.
+func immutableType(t *testing.T) scim.ResourceType {
+	t.Helper()
+	rt := applyType(t)
+	rt.Schema.Attributes = append(rt.Schema.Attributes,
+		scim.Attribute{Name: "labels", Type: scim.TypeString, MultiValued: true, Mutability: scim.MutabilityImmutable},
+		scim.Attribute{Name: "source", Type: scim.TypeComplex, Mutability: scim.MutabilityImmutable, SubAttributes: []scim.Attribute{
+			{Name: "system", Type: scim.TypeString},
+			{Name: "id", Type: scim.TypeString},
+		}},
+	)
+	return rt
+}
+
+func seedSet(path string, v any) func(t *testing.T, res *scim.Resource) {
+	return func(t *testing.T, res *scim.Resource) {
+		t.Helper()
+		require.NoError(t, res.Set(path, v))
+	}
+}
+
+// TestApplyImmutableMatchOrError pins RFC 7643 §2.2 for assigned
+// immutable attributes: re-sending the current value is a Changed=false
+// no-op, a different value is a mutability error, and an unassigned
+// attribute accepts anything — for pathed and pathless add and replace
+// across scalar, multi-valued, and complex shapes.
+func TestApplyImmutableMatchOrError(t *testing.T) {
+	source := map[string]any{"system": "hr", "id": "7"}
+	tests := []struct {
+		name     string
+		seed     func(t *testing.T, res *scim.Resource)
+		op       string
+		wantType string
+	}{
+		{
+			name: "pathed add same scalar",
+			seed: seedSet("origin", "factory"),
+			op:   `{"op": "add", "path": "origin", "value": "factory"}`,
+		},
+		{
+			name: "pathed replace same scalar",
+			seed: seedSet("origin", "factory"),
+			op:   `{"op": "replace", "path": "origin", "value": "factory"}`,
+		},
+		{
+			name:     "pathed add different scalar",
+			seed:     seedSet("origin", "factory"),
+			op:       `{"op": "add", "path": "origin", "value": "other"}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name: "pathless add same scalar",
+			seed: seedSet("origin", "factory"),
+			op:   `{"op": "add", "value": {"origin": "factory"}}`,
+		},
+		{
+			name: "pathless replace same scalar",
+			seed: seedSet("origin", "factory"),
+			op:   `{"op": "replace", "value": {"origin": "factory"}}`,
+		},
+		{
+			name:     "pathless add different scalar",
+			seed:     seedSet("origin", "factory"),
+			op:       `{"op": "add", "value": {"origin": "other"}}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "pathless replace different scalar",
+			seed:     seedSet("origin", "factory"),
+			op:       `{"op": "replace", "value": {"origin": "other"}}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name: "pathless add unassigned scalar",
+			op:   `{"op": "add", "value": {"origin": "factory"}}`,
+		},
+		{
+			name: "add already-present element to immutable multi",
+			seed: seedSet("labels", []any{"a", "b"}),
+			op:   `{"op": "add", "path": "labels", "value": ["a"]}`,
+		},
+		{
+			name:     "add new element to immutable multi",
+			seed:     seedSet("labels", []any{"a", "b"}),
+			op:       `{"op": "add", "path": "labels", "value": ["c"]}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name: "replace immutable multi with identical list",
+			seed: seedSet("labels", []any{"a", "b"}),
+			op:   `{"op": "replace", "path": "labels", "value": ["a", "b"]}`,
+		},
+		{
+			name:     "replace immutable multi with subset",
+			seed:     seedSet("labels", []any{"a", "b"}),
+			op:       `{"op": "replace", "path": "labels", "value": ["a"]}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "replace immutable multi with empty list",
+			seed:     seedSet("labels", []any{"a"}),
+			op:       `{"op": "replace", "path": "labels", "value": []}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name: "add empty list to immutable multi is a no-op",
+			seed: seedSet("labels", []any{"a"}),
+			op:   `{"op": "add", "path": "labels", "value": []}`,
+		},
+		{
+			name: "merge matching subset into immutable complex",
+			seed: seedSet("source", source),
+			op:   `{"op": "add", "path": "source", "value": {"system": "hr"}}`,
+		},
+		{
+			name:     "merge differing sub into immutable complex",
+			seed:     seedSet("source", source),
+			op:       `{"op": "replace", "path": "source", "value": {"id": "8"}}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name:     "sub-attribute path under assigned immutable complex",
+			seed:     seedSet("source", source),
+			op:       `{"op": "add", "path": "source.id", "value": "7"}`,
+			wantType: scim.ScimTypeMutability,
+		},
+		{
+			name: "sub-attribute path under unassigned immutable complex",
+			op:   `{"op": "add", "path": "source.id", "value": "7"}`,
+		},
+		{
+			name:     "type mismatch on immutable is invalidValue",
+			seed:     seedSet("origin", "factory"),
+			op:       `{"op": "replace", "path": "origin", "value": 7}`,
+			wantType: scim.ScimTypeInvalidValue,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := immutableType(t)
+			res := scim.NewResource(&rt)
+			require.NoError(t, res.Set("kind", "widget"))
+			if tt.seed != nil {
+				tt.seed(t, res)
+			}
+			before := res.Clone()
+			result, err := applyOne(t, res, Strict, `[`+tt.op+`]`)
+			if tt.wantType != "" {
+				requireScimType(t, err, tt.wantType)
+				return
+			}
+			require.NoError(t, err)
+			if tt.seed == nil {
+				assert.True(t, result.Changed)
+				return
+			}
+			assert.False(t, result.Changed, "re-sending the current value is a no-op")
+			assert.Equal(t, before, result.Resource)
+		})
+	}
+}
+
+// TestApplyInputNotMutated pins Apply's atomicity contract against the
+// shared-leaf working copy: however the op touches the resource, the
+// caller's input is unchanged afterwards.
+func TestApplyInputNotMutated(t *testing.T) {
+	tests := []struct {
+		name string
+		op   string
+	}{
+		{name: "replace scalar", op: `{"op": "replace", "path": "title", "value": "Changed"}`},
+		{name: "set sub-attribute", op: `{"op": "replace", "path": "name.givenName", "value": "Changed"}`},
+		{name: "remove sub-attribute", op: `{"op": "remove", "path": "name.verified"}`},
+		{name: "remove element", op: `{"op": "remove", "path": "emails[type eq \"work\"]"}`},
+		{name: "remove element sub", op: `{"op": "remove", "path": "emails[type eq \"work\"].value"}`},
+		{name: "write element sub", op: `{"op": "replace", "path": "emails[type eq \"work\"].display", "value": "W"}`},
+		{name: "merge into element", op: `{"op": "add", "path": "emails[type eq \"work\"]", "value": {"display": "W"}}`},
+		{name: "replace element", op: `{"op": "replace", "path": "emails[type eq \"work\"]", "value": {"value": "x@y.z"}}`},
+		{name: "new primary demotes", op: `{"op": "add", "path": "emails", "value": [{"value": "p@q.r", "primary": true}]}`},
+		{name: "append scalar", op: `{"op": "add", "path": "tags", "value": ["beta"]}`},
+		{name: "extension write", op: `{"op": "add", "path": "urn:example:2.0:WidgetExt:level", "value": 3}`},
+		{name: "pathless merge", op: `{"op": "add", "value": {"name": {"givenName": "Z"}, "tags": ["z"]}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := applyWidget(t)
+			require.NoError(t, res.Set("urn:example:2.0:WidgetExt:level", 1))
+			snapshot := res.Clone()
+			result, err := applyOne(t, res, Strict, `[`+tt.op+`]`)
+			require.NoError(t, err)
+			assert.True(t, result.Changed)
+			assert.Equal(t, snapshot, res, "input resource must not change")
+			assert.NotEqual(t, snapshot, result.Resource)
+		})
+	}
+}

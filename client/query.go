@@ -53,12 +53,20 @@ func (s *ResourceService) List(ctx context.Context, q Query) iter.Seq2[*scim.Res
 		if count <= 0 {
 			count = defaultPageSize
 		}
+		var prev pageFingerprint
 		for {
 			page, err := s.fetchPage(ctx, rt, &q, start, count)
 			if err != nil {
 				yield(nil, err)
 				return
 			}
+			fp := fingerprint(page)
+			if fp.stalled(prev) {
+				yield(nil, fmt.Errorf("scimkit client: page at startIndex %d repeated the previous page: %w",
+					start, ErrPaginationStalled))
+				return
+			}
+			prev = fp
 			for _, raw := range page.Resources {
 				res, derr := scim.DecodeResource(raw, rt)
 				if derr != nil {
@@ -84,6 +92,37 @@ func (s *ResourceService) List(ctx context.Context, q Query) iter.Seq2[*scim.Res
 			}
 		}
 	}
+}
+
+// pageFingerprint identifies a page well enough to detect a server that
+// ignores startIndex and serves the same page forever.
+type pageFingerprint struct {
+	seen  bool
+	start int
+	n     int
+	first string
+}
+
+func fingerprint(page scim.ListResponse) pageFingerprint {
+	fp := pageFingerprint{seen: true, start: page.StartIndex, n: len(page.Resources)}
+	if fp.n > 0 {
+		fp.first = string(page.Resources[0])
+	}
+	return fp
+}
+
+// stalled reports whether this non-empty page is the same page the
+// server returned last time: either it echoes the previous startIndex
+// or it carries identical content. Either way advancing the cursor
+// changes nothing and the walk would never terminate.
+func (fp pageFingerprint) stalled(prev pageFingerprint) bool {
+	if !prev.seen || fp.n == 0 {
+		return false
+	}
+	if fp.start != 0 && fp.start == prev.start {
+		return true
+	}
+	return fp.n == prev.n && fp.first == prev.first
 }
 
 // Lookup returns the single resource matching the filter, nil when none

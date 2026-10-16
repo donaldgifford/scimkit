@@ -71,6 +71,46 @@ func TestNewConfigValidation(t *testing.T) {
 			},
 			wantErr: "duplicate endpoint",
 		},
+		{
+			name: "max page size below default page size",
+			cfg: server.Config{
+				BaseURL:          "https://example.com",
+				ResourceTypes:    []server.Registration{userReg},
+				MaxFilterResults: 100,
+				DefaultPageSize:  50,
+				MaxPageSize:      10,
+			},
+			wantErr: "MaxPageSize (10) must be at least DefaultPageSize (50)",
+		},
+		{
+			name: "max page size equal to default page size is fine",
+			cfg: server.Config{
+				BaseURL:          "https://example.com",
+				ResourceTypes:    []server.Registration{userReg},
+				MaxFilterResults: 100,
+				DefaultPageSize:  50,
+				MaxPageSize:      50,
+			},
+		},
+		{
+			name: "large default page size lifts the max page size default",
+			cfg: server.Config{
+				BaseURL:          "https://example.com",
+				ResourceTypes:    []server.Registration{userReg},
+				MaxFilterResults: 100,
+				DefaultPageSize:  500,
+			},
+		},
+		{
+			name: "negative max body bytes",
+			cfg: server.Config{
+				BaseURL:          "https://example.com",
+				ResourceTypes:    []server.Registration{userReg},
+				MaxFilterResults: 100,
+				MaxBodyBytes:     -1,
+			},
+			wantErr: "MaxBodyBytes must not be negative",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

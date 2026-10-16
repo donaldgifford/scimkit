@@ -30,7 +30,10 @@ docz create design "Your Design Title"
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 ## All Design
 
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 | ID | Title | Status | Date | Author | Link |
-|----|-------|--------|------|--------|------|
-| DESIGN-0001 | scimkit library architecture | In Review | 2026-07-02 | Donald Gifford | [0001-scimkit-library-architecture.md](0001-scimkit-library-architecture.md) |
+| --- | --- | --- | --- | --- | --- |
+| DESIGN-0001 | scimkit library architecture | Implemented | 2026-07-02 | Donald Gifford | [0001-scimkit-library-architecture.md](0001-scimkit-library-architecture.md) |
+<!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->

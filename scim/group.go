@@ -23,18 +23,17 @@ type Group struct {
 }
 
 // Resource converts the typed view to a canonical Resource backed by the
-// built-in Group resource type.
+// built-in Group resource type (one shared read-only instance).
 func (g *Group) Resource() (*Resource, error) {
-	rt := GroupResourceType()
-	r := NewResource(&rt)
+	r := NewResource(sharedGroupResourceType())
 	r.SetMeta(g.Meta)
 	fields := []struct {
 		path  string
 		value any
 	}{
-		{"id", stringValue(g.ID)},
-		{"externalId", stringValue(g.ExternalID)},
-		{"displayName", stringValue(g.DisplayName)},
+		{nameID, stringValue(g.ID)},
+		{nameExternalID, stringValue(g.ExternalID)},
+		{nameDisplayName, stringValue(g.DisplayName)},
 		{"members", memberElements(g.Members)},
 	}
 	for _, f := range fields {
@@ -56,9 +55,9 @@ func GroupFromResource(r *Resource) (*Group, error) {
 	}
 	return &Group{
 		ID:          getString(r, "id"),
-		ExternalID:  getString(r, "externalId"),
+		ExternalID:  getString(r, nameExternalID),
 		Meta:        r.Meta(),
-		DisplayName: getString(r, "displayName"),
+		DisplayName: getString(r, nameDisplayName),
 		Members:     membersAt(r),
 	}, nil
 }

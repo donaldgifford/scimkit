@@ -17,8 +17,8 @@ const mediaType = "application/scim+json"
 // values keep their status and scimType; anything else becomes a generic
 // 500 so internal details never leak onto the wire.
 func writeError(w http.ResponseWriter, logger *slog.Logger, err error) {
-	var scimErr *scim.Error
-	if !errors.As(err, &scimErr) {
+	scimErr, ok := errors.AsType[*scim.Error](err)
+	if !ok {
 		logger.Error("internal error", "err", err)
 		scimErr = &scim.Error{Status: http.StatusInternalServerError, Detail: "internal error"}
 	}

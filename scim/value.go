@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -45,10 +46,20 @@ func (m MultiComplexValue) IndexFunc(pred func(ComplexValue) bool) int {
 //	reference  ReferenceValue  multi: []ReferenceValue
 //	complex    ComplexValue    multi: MultiComplexValue
 
-// coerceValue converts v into the canonical stored form for the attribute,
-// accepting both natural Go values and decoded-JSON values (string, bool,
-// json.Number, map[string]any, []any). A nil result with nil error means the
-// value canonicalizes to unassigned (nil input or an empty multi-value).
+// Coerce converts v into the canonical stored form for the attribute (the
+// table above), accepting both natural Go values and decoded-JSON values
+// (string, bool, json.Number, map[string]any, []any). A nil result with
+// nil error means the value canonicalizes to unassigned: nil input, an
+// empty multi-value, or an object with no known sub-attributes. It is the
+// same conversion Resource.Set applies, exposed so engines that compare or
+// merge values before writing (the PATCH applier) can work in stored forms
+// without a scratch resource. Errors are plain descriptions of the type
+// mismatch; Set wraps them as ErrInvalidValue.
+func Coerce(a *Attribute, v any) (any, error) {
+	return coerceValue(a, v)
+}
+
+// coerceValue is the package-internal spelling of Coerce.
 func coerceValue(a *Attribute, v any) (any, error) {
 	if v == nil {
 		return nil, nil //nolint:nilnil // nil value with nil error means unassigned (RFC 7643 §2.5)
@@ -60,6 +71,12 @@ func coerceValue(a *Attribute, v any) (any, error) {
 }
 
 func coerceSingle(a *Attribute, v any) (any, error) {
+	if isStoredScalar(a.Type, v) {
+		// Already canonical: hand back the same interface value rather
+		// than unboxing and re-boxing it, which would allocate once per
+		// value on every re-coercion of an existing list.
+		return v, nil
+	}
 	switch a.Type {
 	case TypeString:
 		return coerceString(v)
@@ -85,6 +102,28 @@ func coerceSingle(a *Attribute, v any) (any, error) {
 		return cv, nil
 	default:
 		return nil, fmt.Errorf("attribute %q: unknown type %q", a.Name, a.Type)
+	}
+}
+
+// isStoredScalar reports whether v is already the immutable stored form
+// for a scalar attribute type. Binary ([]byte) is excluded: it is
+// mutable and must be cloned at the boundary.
+func isStoredScalar(t AttrType, v any) bool {
+	switch v.(type) {
+	case string:
+		return t == TypeString
+	case bool:
+		return t == TypeBoolean
+	case float64:
+		return t == TypeDecimal
+	case int64:
+		return t == TypeInteger
+	case time.Time:
+		return t == TypeDateTime
+	case ReferenceValue:
+		return t == TypeReference
+	default:
+		return false
 	}
 }
 
@@ -364,10 +403,12 @@ func FindAttribute(attrs []Attribute, name string) *Attribute {
 
 // findAttribute returns the attribute whose name folds equal to name, or
 // nil. It is the single lookup used for case-insensitive resolution.
+// strings.EqualFold compares without allocating; folding each declared
+// name with ToLower on every lookup put a per-attribute allocation on the
+// hottest path in the library.
 func findAttribute(attrs []Attribute, name string) *Attribute {
-	folded := foldName(name)
 	for i := range attrs {
-		if foldName(attrs[i].Name) == folded {
+		if strings.EqualFold(attrs[i].Name, name) {
 			return &attrs[i]
 		}
 	}

@@ -1,7 +1,7 @@
 # scimkit — task runner
 #
-# Project automation via just. Use either the Makefile or this justfile —
-# both expose the same target set with equivalent behavior.
+# Project automation via just (`just` for the menu). Imports docker.just
+# for the image recipes.
 
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 

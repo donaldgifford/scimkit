@@ -1,6 +1,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -15,6 +17,7 @@ type typeHandler struct {
 	store     Store
 	patcher   Patcher
 	filterCap FilterUnsupported
+	sortCap   SortUnsupported
 	cfg       *Config
 	locks     *stripedLocks
 }
@@ -29,11 +32,15 @@ func newTypeHandler(reg *Registration, cfg *Config, locks *stripedLocks) *typeHa
 	if fc, ok := reg.Store.(FilterUnsupported); ok {
 		h.filterCap = fc
 	}
+	if sc, ok := reg.Store.(SortUnsupported); ok {
+		h.sortCap = sc
+	}
 	cfg.Logger.Info("scim resource type registered",
 		"type", reg.Type.Name,
 		"endpoint", reg.Type.Endpoint,
 		"nativePatch", h.patcher != nil,
 		"filterCapabilityReported", h.filterCap != nil,
+		"sortCapabilityReported", h.sortCap != nil,
 	)
 	return h
 }
@@ -63,10 +70,19 @@ func (h *typeHandler) assignCreateIdentity(res *scim.Resource) error {
 	return nil
 }
 
-// readBody drains the request body, mapping failure to invalidSyntax.
-func readBody(r *http.Request) ([]byte, error) {
-	body, err := io.ReadAll(r.Body)
+// readBody drains the request body under Config.MaxBodyBytes. A body
+// over the limit is 413 — the connection is also closed by
+// http.MaxBytesReader so the client stops sending — and any other read
+// failure maps to invalidSyntax.
+func (h *typeHandler) readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, h.cfg.MaxBodyBytes))
 	if err != nil {
+		if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return nil, &scim.Error{
+				Status: http.StatusRequestEntityTooLarge,
+				Detail: fmt.Sprintf("request body exceeds %d bytes", tooLarge.Limit),
+			}
+		}
 		return nil, scim.ErrInvalidSyntax("reading request body: " + err.Error())
 	}
 	return body, nil
@@ -81,10 +97,13 @@ func requestProjection(r *http.Request) (scim.Projection, error) {
 }
 
 // writeResource stamps the entity tag into meta.version, sets the ETag
-// and (on 201) Location headers, and writes the projected body.
+// and (on 201) Location headers, and writes the projected body. The
+// resource is cloned first: stores may hand back pointers into their own
+// state, and the stamp must never leak into what they persist.
 func (h *typeHandler) writeResource(
 	w http.ResponseWriter, res *scim.Resource, p scim.Projection, status int,
 ) {
+	res = res.Clone()
 	tag, err := stampETag(res)
 	if err != nil {
 		writeError(w, h.cfg.Logger, err)

@@ -6,7 +6,9 @@
 package memstore
 
 import (
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/donaldgifford/scimkit/patch"
@@ -16,6 +18,9 @@ import (
 // Store holds one resource type's resources. All methods are safe for
 // concurrent use; every resource crossing the boundary — in or out — is
 // cloned, so callers can never alias internal state.
+//
+// Unsorted lists come back in insertion order, stable across calls, so
+// clients can page a static data set without duplicates or gaps.
 type Store struct {
 	rt      scim.ResourceType
 	profile patch.Profile
@@ -23,6 +28,9 @@ type Store struct {
 	mu     sync.RWMutex
 	items  map[string]*scim.Resource
 	seq    map[string]uint64
+	order  []string          // ids in insertion order — the unsorted List order
+	rank   map[string]uint64 // id → insertion rank, to order index hits the same way
+	clock  uint64            // last rank handed out
 	unique []string
 	extra  []string
 	index  map[string]map[string]map[string]struct{}
@@ -56,6 +64,7 @@ func New(rt scim.ResourceType, opts ...Option) *Store {
 		profile: patch.Default,
 		items:   make(map[string]*scim.Resource),
 		seq:     make(map[string]uint64),
+		rank:    make(map[string]uint64),
 		index:   make(map[string]map[string]map[string]struct{}),
 	}
 	for i := range rt.Schema.Attributes {
@@ -68,6 +77,25 @@ func New(rt scim.ResourceType, opts ...Option) *Store {
 		o(s)
 	}
 	return s
+}
+
+// insert records a new id at the end of the insertion order. Caller holds
+// the write lock.
+func (s *Store) insert(id string, res *scim.Resource) {
+	s.clock++
+	s.rank[id] = s.clock
+	s.order = append(s.order, id)
+	s.items[id] = res
+}
+
+// remove drops an id from every structure. Caller holds the write lock.
+func (s *Store) remove(id string) {
+	delete(s.items, id)
+	delete(s.seq, id)
+	delete(s.rank, id)
+	if i := slices.Index(s.order, id); i >= 0 {
+		s.order = slices.Delete(s.order, i, i+1)
+	}
 }
 
 // indexedAttrs returns every indexed attribute: unique ones plus
@@ -155,4 +183,20 @@ func (s *Store) bumpVersion(id string, res *scim.Resource) {
 
 func versionString(n uint64) string {
 	return `W/"` + strconv.FormatUint(n, 10) + `"`
+}
+
+// opaqueVersion reduces a version token to its opaque part for the
+// RFC 7232 §2.3.2 weak comparison: W/"3", "3", and 3 all name the same
+// version. Clients echo whatever ETag form they were given — or none of
+// the decoration at all — and the store must not fail a swap over it.
+func opaqueVersion(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "W/")
+	return strings.Trim(v, `"`)
+}
+
+// versionMatches is the compare-and-swap test: an empty token always
+// matches (no precondition), otherwise opaque parts must agree.
+func versionMatches(token, current string) bool {
+	return token == "" || opaqueVersion(token) == opaqueVersion(current)
 }

@@ -51,3 +51,10 @@ MD030: false
 # https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md
 MD033: false
 # allowed_elements: ["a", "img", "div"]
+
+# Multiple headings with the same content
+# Keep a Changelog repeats "Features"/"Bug Fixes" under every release, so
+# only flag duplicates that are siblings under the same parent heading.
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/md024.md
+MD024:
+  siblings_only: true

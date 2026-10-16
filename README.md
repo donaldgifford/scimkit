@@ -32,7 +32,8 @@ go get github.com/donaldgifford/scimkit
 ```
 
 Zero runtime dependencies — the library imports only the standard
-library.
+library. Requires Go 1.26 or newer (the `go.mod` floor; development and
+CI run on the pinned `toolchain`, and CI tests both).
 
 ## Quickstarts
 
@@ -189,8 +190,8 @@ just self-check               # simulator ↔ mock self-check over the built CLI
 
 PR-label driven: every PR carries one of `major`/`minor`/`patch`/
 `dont-release`; merging to main tags and releases automatically via
-goreleaser and publishes the container image to GHCR. Pre-1.0, breaking
-changes ride `minor`.
+goreleaser and publishes the container image to GHCR, signed keyless with
+cosign. Pre-1.0, breaking changes ride `minor`.
 
 ## Conventions
 

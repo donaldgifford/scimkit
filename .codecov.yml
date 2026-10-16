@@ -1,12 +1,16 @@
 ---
 # $schema=https://www.schemastore.org/codecov.json
+# Trend UI only — the enforced floor is scripts/coverage-gate.sh (80% per
+# library package). Ignores mirror the gate's exemptions.
 coverage:
   status:
     project:
       default:
-        target: 60%
-        threshold: 40%
+        target: 80%
+        threshold: 2%
 ignore:
-  - "main.go"
+  - "cmd"
+  - "internal/schemagen"
+  - "**/*_gen.go"
   - "docs"
   - "scripts"

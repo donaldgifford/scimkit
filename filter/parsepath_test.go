@@ -91,6 +91,12 @@ func TestParsePathErrors(t *testing.T) {
 		},
 		{name: "garbage after value filter", input: `emails[type pr]value`, wantErr: "expected .subAttr"},
 		{name: "number in path position", input: `42`, wantErr: "expected attribute path"},
+		{name: "nested value filter", input: `emails[emails[type pr]]`, wantErr: "cannot nest inside a value filter"},
+		{
+			name:    "nested value filter with sub-attribute",
+			input:   `members[groups[value eq "x"] pr].value`,
+			wantErr: "cannot nest inside a value filter",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1,7 +1,9 @@
 package memstore
 
 import (
+	"cmp"
 	"context"
+	"slices"
 
 	"github.com/donaldgifford/scimkit/filter"
 	"github.com/donaldgifford/scimkit/scim"
@@ -11,7 +13,8 @@ import (
 // List evaluates the query natively: an eq filter over an indexed
 // attribute shortcuts candidate selection, everything else scans with
 // filter.Match. TotalResults is always the filtered total; Count 0
-// returns totals only.
+// returns totals only. Without SortBy, resources come back in insertion
+// order — stable across calls, so paging is consistent.
 func (s *Store) List(_ context.Context, q server.Query) (server.Page, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -50,35 +53,43 @@ func (s *Store) matchCandidates(f filter.Expr) ([]*scim.Resource, error) {
 	return matched, nil
 }
 
-// candidateSet returns the resources worth testing: the index bucket
-// for a bare eq comparison on an indexed attribute, else everything.
+// candidateSet returns the resources worth testing, in insertion order:
+// the index bucket for a bare eq comparison on an indexed attribute,
+// else everything.
 func (s *Store) candidateSet(f filter.Expr) []*scim.Resource {
 	if ids, ok := s.indexLookup(f); ok {
-		out := make([]*scim.Resource, 0, len(ids))
+		hits := make([]string, 0, len(ids))
 		for id := range ids {
-			if res, exists := s.items[id]; exists {
-				out = append(out, res)
+			if _, exists := s.items[id]; exists {
+				hits = append(hits, id)
 			}
+		}
+		slices.SortFunc(hits, func(a, b string) int {
+			return cmp.Compare(s.rank[a], s.rank[b])
+		})
+		out := make([]*scim.Resource, len(hits))
+		for i, id := range hits {
+			out[i] = s.items[id]
 		}
 		return out
 	}
-	out := make([]*scim.Resource, 0, len(s.items))
-	for _, res := range s.items {
-		out = append(out, res)
+	out := make([]*scim.Resource, 0, len(s.order))
+	for _, id := range s.order {
+		out = append(out, s.items[id])
 	}
 	return out
 }
 
 func (s *Store) indexLookup(f filter.Expr) (map[string]struct{}, bool) {
-	cmp, ok := f.(filter.Compare)
-	if !ok || cmp.Op != filter.OpEqual || cmp.Path.URN != "" || cmp.Path.SubAttr != "" {
+	c, ok := f.(filter.Compare)
+	if !ok || c.Op != filter.OpEqual || c.Path.URN != "" || c.Path.SubAttr != "" {
 		return nil, false
 	}
-	want, ok := cmp.Value.(string)
+	want, ok := c.Value.(string)
 	if !ok {
 		return nil, false
 	}
-	attr := scim.FoldName(cmp.Path.Attr)
+	attr := scim.FoldName(c.Path.Attr)
 	bucket, indexed := s.index[attr]
 	if !indexed {
 		return nil, false
@@ -99,9 +110,6 @@ func paginate(list []*scim.Resource, startIndex, count int) []*scim.Resource {
 	if from >= len(list) {
 		return nil
 	}
-	to := from + count
-	if to > len(list) {
-		to = len(list)
-	}
+	to := min(from+count, len(list))
 	return list[from:to]
 }

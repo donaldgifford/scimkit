@@ -27,6 +27,7 @@ func TestListParamValidation(t *testing.T) {
 		{name: "bad startIndex is 400", path: "/Users?startIndex=abc", wantStatus: http.StatusBadRequest},
 		{name: "bad count is 400", path: "/Users?count=xyz", wantStatus: http.StatusBadRequest},
 		{name: "bad sortBy path is 400", path: "/Users?sortBy=..bad", wantStatus: http.StatusBadRequest},
+		{name: "unknown sortBy attribute is 400", path: "/Users?sortBy=nope", wantStatus: http.StatusBadRequest},
 		{name: "unknown sortOrder is 400", path: "/Users?sortOrder=sideways", wantStatus: http.StatusBadRequest},
 		{
 			name: "negative count returns totals only", path: "/Users?count=-5",

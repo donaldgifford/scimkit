@@ -74,10 +74,11 @@ the distroless rootfs is read-only (nonroot UID 65532).
 - **Zero runtime dependencies.** Stdlib only; `golang.org/x/*` counts
   as a dependency. Test-only deps (go-cmp/testify) are allowed — they
   don't propagate to consumers. (DESIGN-0001 Q8)
-- **`go.mod` go directive matches `mise.toml`** (currently `go 1.26.4`),
-  fleet convention. Decoupling to an N-1 floor for consumers was
-  considered and deferred (DESIGN-0001 Q6) — revisit when external
-  consumers need it.
+- **Go floor and toolchain are decoupled** (DESIGN-0001 Q6 option a):
+  `go.mod` carries a bare `go 1.26` floor plus `toolchain go1.27.2`;
+  `mise.toml` and the Dockerfile pin the same toolchain. CI tests both the
+  floor (`GOTOOLCHAIN=local` on 1.26.x) and the toolchain. Renovate bumps
+  the toolchain, never the floor — raise the floor deliberately.
 - **`internal/` is for helpers only.** This repo's product is its public
   API; new packages go top-level per the design, not under `internal/`.
 - **Wire-format correctness is a feature.** Attribute names fold case on

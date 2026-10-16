@@ -1,7 +1,7 @@
 ---
 id: IMPL-0001
 title: "scimkit v0 implementation"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-07-03
 ---
@@ -14,6 +14,8 @@ created: 2026-07-03
 **Date:** 2026-07-03
 
 <!--toc:start-->
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 - [Objective](#objective)
 - [Scope](#scope)
   - [In Scope](#in-scope)
@@ -56,6 +58,7 @@ created: 2026-07-03
   - [Q6 — Coverage enforcement?](#q6--coverage-enforcement)
   - [Q7 — PR granularity per phase?](#q7--pr-granularity-per-phase)
 - [References](#references)
+<!-- markdownlint-restore -->
 <!--toc:end-->
 
 ## Objective
@@ -766,7 +769,7 @@ Not release-blocking; sequenced by value.
 Key files by phase (all Create unless noted):
 
 | File | Phase | Description |
-|------|-------|-------------|
+| ------ | ------- | ------------- |
 | `scim/schemas/*.json` | 1 | Vendored RFC 7643 §8.7 schema documents |
 | `internal/schemagen/` | 1 | go:generate schema-to-Go generator |
 | `scim/schema_gen.go` | 1 | Generated built-in schema values (committed) |

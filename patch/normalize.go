@@ -2,7 +2,7 @@ package patch
 
 import (
 	"encoding/json"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -48,19 +48,21 @@ func isPathlessReplace(ro *rawOp, index int, p Profile) bool {
 }
 
 // splitFlattenedKeys partitions a pathless replace's value object: keys
-// containing '.' or ':' (impossible in a plain ATTRNAME) become pathed
-// replace ops; the rest stay behind as a plain-key object.
+// that are dotted sub-attribute paths or URN-qualified ("urn:" prefix,
+// case-insensitive) become pathed replace ops; the rest, including
+// unknown colon-bearing junk like "foo:bar", stay behind as plain keys
+// for the pathless merge to ignore as unknown attributes.
 func splitFlattenedKeys(obj map[string]any, op string) (map[string]any, []rawOp) {
 	plain := make(map[string]any)
 	keys := make([]string, 0, len(obj))
 	for k := range obj {
-		if strings.ContainsAny(k, ".:") {
+		if isFlattenedKey(k) {
 			keys = append(keys, k)
 			continue
 		}
 		plain[k] = obj[k]
 	}
-	sort.Slice(keys, func(i, j int) bool { return scim.FoldName(keys[i]) < scim.FoldName(keys[j]) })
+	slices.SortFunc(keys, compareFolded)
 	expanded := make([]rawOp, 0, len(keys))
 	for _, k := range keys {
 		expanded = append(expanded, rawOp{
@@ -72,6 +74,16 @@ func splitFlattenedKeys(obj map[string]any, op string) (map[string]any, []rawOp)
 		})
 	}
 	return plain, expanded
+}
+
+// isFlattenedKey reports whether a pathless-replace key is a flattened
+// path: a dotted sub-attribute path or a schema-URN-qualified name.
+func isFlattenedKey(k string) bool {
+	if strings.Contains(k, ".") {
+		return true
+	}
+	const urnPrefix = "urn:"
+	return len(k) >= len(urnPrefix) && strings.EqualFold(k[:len(urnPrefix)], urnPrefix)
 }
 
 // rewriteRemoveSelectors turns a remove carrying an op-level value into
@@ -144,7 +156,7 @@ func selectorObjectFilter(obj map[string]any, index int) (filter.Expr, error) {
 	if len(keys) == 0 {
 		return nil, scim.ErrInvalidValue(opLabel(index) + ": remove selector element selects nothing")
 	}
-	sort.Slice(keys, func(i, j int) bool { return scim.FoldName(keys[i]) < scim.FoldName(keys[j]) })
+	slices.SortFunc(keys, compareFolded)
 	var expr filter.Expr
 	for _, k := range keys {
 		clause := filter.Compare{Path: filter.Path{Attr: k}, Op: filter.OpEqual, Value: obj[k]}
@@ -266,7 +278,7 @@ func coercePathless(rt *scim.ResourceType, obj map[string]any) {
 		}
 		attr := findAttr(rt.Schema.Attributes, k)
 		if attr == nil {
-			attr = findAttr(scim.CommonAttributes(), k)
+			attr = findAttr(commonAttrs, k)
 		}
 		if attr == nil {
 			continue

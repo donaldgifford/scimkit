@@ -5,6 +5,10 @@ import (
 	"github.com/donaldgifford/scimkit/scim"
 )
 
+// commonAttrs is the package's read-only copy of the RFC 7643 §3.1 common
+// attributes; CommonAttributes() deep-clones on every call.
+var commonAttrs = scim.CommonAttributes()
+
 // resolveTarget maps a parsed path to schema metadata: the top-level
 // attribute and, when the path names one, the sub-attribute. ok=false
 // means the path is undefined for this resource type — normalization
@@ -16,7 +20,7 @@ func resolveTarget(rt *scim.ResourceType, p *filter.Path) (attr, sub *scim.Attri
 	}
 	attr = findAttr(attrs, p.Attr)
 	if attr == nil && p.URN == "" {
-		attr = findAttr(scim.CommonAttributes(), p.Attr)
+		attr = findAttr(commonAttrs, p.Attr)
 	}
 	if attr == nil {
 		return nil, nil, false

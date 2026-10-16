@@ -19,8 +19,9 @@ type listRequest struct {
 }
 
 // parseListParams normalizes the RFC 7644 §3.4.2 query parameters from
-// a GET request's URL.
-func parseListParams(values url.Values, defaultCount int) (listRequest, error) {
+// a GET request's URL against the type's schema and the server's paging
+// limits.
+func parseListParams(values url.Values, rt *scim.ResourceType, cfg *Config) (listRequest, error) {
 	raw := rawListParams{
 		filter:     values.Get("filter"),
 		sortBy:     values.Get("sortBy"),
@@ -30,7 +31,7 @@ func parseListParams(values url.Values, defaultCount int) (listRequest, error) {
 		attributes: values.Get("attributes"),
 		excluded:   values.Get("excludedAttributes"),
 	}
-	return raw.normalize(defaultCount)
+	return raw.normalize(rt, cfg)
 }
 
 // searchRequest is the urn:…:api:messages:2.0:SearchRequest body
@@ -48,7 +49,7 @@ type searchRequest struct {
 
 // parseSearchBody normalizes a POST /.search body into the same shape as
 // the GET query parameters.
-func parseSearchBody(body []byte, defaultCount int) (listRequest, error) {
+func parseSearchBody(body []byte, rt *scim.ResourceType, cfg *Config) (listRequest, error) {
 	var sr searchRequest
 	if err := json.Unmarshal(body, &sr); err != nil {
 		return listRequest{}, scim.ErrInvalidSyntax(fmt.Sprintf("parse search request: %v", err))
@@ -70,7 +71,7 @@ func parseSearchBody(body []byte, defaultCount int) (listRequest, error) {
 	if len(sr.ExcludedAttributes) > 0 {
 		raw.excluded = strings.Join(sr.ExcludedAttributes, ",")
 	}
-	return raw.normalize(defaultCount)
+	return raw.normalize(rt, cfg)
 }
 
 // rawListParams holds the string forms both transports reduce to.
@@ -84,7 +85,7 @@ type rawListParams struct {
 	excluded   string
 }
 
-func (raw *rawListParams) normalize(defaultCount int) (listRequest, error) {
+func (raw *rawListParams) normalize(rt *scim.ResourceType, cfg *Config) (listRequest, error) {
 	var lr listRequest
 	var err error
 	if lr.projection, err = parseProjection(raw.attributes, raw.excluded); err != nil {
@@ -95,20 +96,26 @@ func (raw *rawListParams) normalize(defaultCount int) (listRequest, error) {
 			return listRequest{}, scim.ErrInvalidFilter(err.Error())
 		}
 	}
-	if err := raw.normalizeSort(&lr); err != nil {
+	if err := raw.normalizeSort(&lr, rt); err != nil {
 		return listRequest{}, err
 	}
-	if err := raw.normalizePagination(&lr, defaultCount); err != nil {
+	if err := raw.normalizePagination(&lr, cfg.DefaultPageSize, cfg.MaxPageSize); err != nil {
 		return listRequest{}, err
 	}
 	return lr, nil
 }
 
-func (raw *rawListParams) normalizeSort(lr *listRequest) error {
+// normalizeSort parses sortBy and resolves it against the schema: a path
+// naming no attribute is invalidValue, not a silently unsorted page —
+// RFC 7644 §3.4.2.3 makes sortBy a schema attribute reference.
+func (raw *rawListParams) normalizeSort(lr *listRequest, rt *scim.ResourceType) error {
 	if raw.sortBy != "" {
 		p, err := filter.ParsePath(raw.sortBy)
 		if err != nil {
 			return scim.ErrInvalidValue(fmt.Sprintf("sortBy: %v", err))
+		}
+		if _, _, ok := resolveAttr(rt, &p); !ok {
+			return scim.ErrInvalidValue(fmt.Sprintf("sortBy: attribute %q is not defined for %s", raw.sortBy, rt.Name))
 		}
 		lr.query.SortBy = &p
 	}
@@ -125,8 +132,9 @@ func (raw *rawListParams) normalizeSort(lr *listRequest) error {
 
 // normalizePagination applies the §3.4.2.4 rules: startIndex below 1
 // becomes 1, negative count becomes 0 (totals only), absent count means
-// the default page size.
-func (raw *rawListParams) normalizePagination(lr *listRequest, defaultCount int) error {
+// the default page size, and count above maxCount is clamped — the
+// response's itemsPerPage tells the client what it actually got.
+func (raw *rawListParams) normalizePagination(lr *listRequest, defaultCount, maxCount int) error {
 	lr.query.StartIndex = 1
 	if raw.startIndex != "" {
 		n, err := strconv.Atoi(raw.startIndex)
@@ -143,7 +151,7 @@ func (raw *rawListParams) normalizePagination(lr *listRequest, defaultCount int)
 		if err != nil {
 			return scim.ErrInvalidValue(fmt.Sprintf("count: %v", err))
 		}
-		lr.query.Count = max(n, 0)
+		lr.query.Count = min(max(n, 0), maxCount)
 	}
 	return nil
 }
@@ -166,9 +174,8 @@ func splitAttrList(s string) []string {
 	if s == "" {
 		return nil
 	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
+	var out []string
+	for p := range strings.SplitSeq(s, ",") {
 		if trimmed := strings.TrimSpace(p); trimmed != "" {
 			out = append(out, trimmed)
 		}

@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [unreleased]
+
+### Features
+
+- *(server)* Harden the request boundary
+- *(server)* StaticBearerToken and ResponseWriter unwrapping
+- *(scimtest)* Bound every simulator step and stop following redirects
+- *(scimtest)* [**breaking**] Append custom resource types, seed any type, cap the recorder
+- *(scim)* Error.Is/IsStatus, Resource.Lookup, exported Coerce, nano dateTime, bare-URN projection
+- *(filter)* Reject nested value filters, bound nesting depth, add MatchElement
+- *(patch)* Immutable match-or-error, MaxOperations, LenientPaths, per-element matching
+
+### Bug Fixes
+
+- *(client)* Gate retries on method idempotency; add WithTokenSource
+- *(client)* Single-flight capability fetch, stalled-pagination guard, visible 401 probe
+- *(memstore)* Deterministic list order and weak version compare
+- *(cmd)* Server timeouts, flag validation, and a SCIMKIT_TOKEN fallback
+
+### Refactor
+
+- *(server)* Adopt errors.AsType, slices.SortStableFunc, strings.SplitSeq
+
+### Documentation
+
+- INV-0001 post-release review, IMPL-0002 follow-on, status transitions
+- *(readme)* Note the Go 1.26 floor and the signed release image
+- *(inv)* Record that the Renovate presets already apply semver labels
+
+### Performance
+
+- *(memstore)* List and member-remove benchmarks
+- *(scim)* Resource.CloneShared and allocation-free re-coercion of stored scalars
+
+### Miscellaneous Tasks
+
+- *(toolchain)* Go 1.27.2 with a 1.26 floor, golangci-lint 2.14, explicit tool pins
+- *(repo)* Remove the Makefile and scrub phase-0 scaffold leftovers
+- Pin actions by SHA, test the Go floor, sign the release image
+
 ## [0.1.0] - 2026-10-16
 
 ### Features

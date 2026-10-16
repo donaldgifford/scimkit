@@ -46,12 +46,24 @@ type Profile struct {
 	// addresses[type eq "work"].locality style paths for elements that
 	// do not exist yet.
 	SynthesizeAddValuePath bool
+
+	// LenientPaths parses op paths with filter.Lenient, accepting the
+	// documented off-grammar value-filter shapes (a bare not operand
+	// without parentheses) inside PATCH paths. No built-in profile sets
+	// it: no IdP corpus fixture needs it yet, and the strict grammar is
+	// the safer default for a location a client asks to modify.
+	LenientPaths bool
 }
 
 // The built-in profiles. Strict is exact RFC 7644; Default accepts
 // shape deviations that carry unambiguous intent but never remaps RFC
 // error semantics; the IdP profiles layer documented per-vendor
 // deviations on top of Default.
+//
+// They are package variables so callers can spell patch.Default at a
+// call site, but they are read-only by contract: mutating one changes
+// behavior for every caller in the process. Deployments that need a
+// variation copy a profile into a local value and adjust the copy.
 var (
 	// Strict is exact RFC 7644 §3.5.2 semantics: every knob off. Use it
 	// for conformance testing and for clients that must never mask a

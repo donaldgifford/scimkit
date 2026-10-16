@@ -2,6 +2,7 @@ package filter
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -140,6 +141,13 @@ func TestParseErrors(t *testing.T) {
 		{name: "dangling and", input: `a pr and`, wantErr: "expected attribute expression"},
 		{name: "value in path position", input: `"a" eq "b"`, wantErr: "expected attribute expression"},
 		{name: "unterminated string", input: `a eq "x`, wantErr: "unterminated string"},
+		{name: "nested value filter", input: `emails[emails[type pr]]`, wantErr: "cannot nest inside a value filter"},
+		{
+			name:    "nested value filter inside logic",
+			input:   `emails[type pr and ims[value pr]]`,
+			wantErr: "cannot nest inside a value filter",
+		},
+		{name: "nesting depth", input: nestedParens(maxDepth+1, `a pr`), wantErr: "nesting depth exceeds 64"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -149,6 +157,80 @@ func TestParseErrors(t *testing.T) {
 			assert.Equal(t, scim.ScimTypeInvalidFilter, scimErr.ScimType)
 			require.ErrorContains(t, err, tt.wantErr)
 			require.ErrorContains(t, err, "position", "errors carry position detail")
+		})
+	}
+}
+
+// nestedParens wraps inner in n layers of parentheses.
+func nestedParens(n int, inner string) string {
+	return strings.Repeat("(", n) + inner + strings.Repeat(")", n)
+}
+
+// TestParseDepthGuard pins the grouping bound exactly at maxDepth for
+// every construct that counts toward it: parentheses, not, and the two
+// mixed, in both filters and PATCH paths.
+func TestParseDepthGuard(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		opts  []ParseOption
+		path  bool
+		depth int
+	}{
+		{name: "parens", input: nestedParens(maxDepth, `a pr`), depth: maxDepth},
+		{name: "parens over", input: nestedParens(maxDepth+1, `a pr`), depth: maxDepth + 1},
+		{
+			name:  "not with parens counts two per layer",
+			input: strings.Repeat("not (", maxDepth/2) + `a pr` + strings.Repeat(")", maxDepth/2),
+			depth: maxDepth,
+		},
+		{
+			name:  "not with parens over",
+			input: strings.Repeat("not (", maxDepth/2) + `(a pr)` + strings.Repeat(")", maxDepth/2),
+			depth: maxDepth + 1,
+		},
+		{
+			name:  "lenient bare not operand still counts",
+			input: strings.Repeat("(", maxDepth-1) + `not a pr` + strings.Repeat(")", maxDepth-1),
+			opts:  []ParseOption{Lenient()},
+			depth: maxDepth,
+		},
+		{
+			name:  "lenient bare not operand over",
+			input: strings.Repeat("(", maxDepth) + `not a pr` + strings.Repeat(")", maxDepth),
+			opts:  []ParseOption{Lenient()},
+			depth: maxDepth + 1,
+		},
+		{name: "inside value filter", input: `emails[` + nestedParens(maxDepth, `type pr`) + `]`, depth: maxDepth},
+		{name: "inside value filter over", input: `emails[` + nestedParens(maxDepth+1, `type pr`) + `]`, depth: maxDepth + 1},
+		{name: "path value filter", input: `emails[` + nestedParens(maxDepth, `type pr`) + `]`, path: true, depth: maxDepth},
+		{
+			name:  "path value filter over",
+			input: `emails[` + nestedParens(maxDepth+1, `type pr`) + `]`,
+			path:  true,
+			depth: maxDepth + 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			if tt.path {
+				_, err = ParsePath(tt.input, tt.opts...)
+			} else {
+				_, err = Parse(tt.input, tt.opts...)
+			}
+			if tt.depth <= maxDepth {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, "nesting depth exceeds")
+			wantType := scim.ScimTypeInvalidFilter
+			if tt.path {
+				wantType = scim.ScimTypeInvalidPath
+			}
+			var scimErr *scim.Error
+			require.ErrorAs(t, err, &scimErr)
+			assert.Equal(t, wantType, scimErr.ScimType)
 		})
 	}
 }

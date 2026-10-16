@@ -18,17 +18,38 @@ import (
 // error. The only errors are structural: an ordering operator (gt/ge/lt/le)
 // on a resolved boolean or binary attribute is scim.ErrInvalidFilter.
 func Match(res *scim.Resource, e Expr) (bool, error) {
-	ev := &evaluator{res: res, rt: res.ResourceType(), common: scim.CommonAttributes()}
+	ev := &evaluator{res: res, rt: res.ResourceType()}
 	if err := ev.validate(e, nil); err != nil {
 		return false, err
 	}
 	return ev.eval(e), nil
 }
 
+// MatchElement evaluates a valuePath's inner filter against one element of
+// the multi-valued complex attribute attr, with the same semantics Match
+// applies per element: bare attribute names resolve as attr's
+// sub-attributes, comparisons honor the sub-attribute's type and caseExact,
+// and undefined sub-attributes are no-values. It is the per-element
+// primitive the PATCH engine uses to select the elements a
+// members[value eq "x"] path targets without rebuilding a resource per
+// element. Errors are the same structural scim.ErrInvalidFilter cases as
+// Match, plus a ValuePath nested inside e, which the grammar forbids.
+func MatchElement(attr *scim.Attribute, elem scim.ComplexValue, e Expr) (bool, error) {
+	var ev evaluator
+	if err := ev.validate(e, attr); err != nil {
+		return false, err
+	}
+	return ev.evalElement(e, elem, attr), nil
+}
+
+// commonAttrs is the package's read-only copy of the RFC 7643 §3.1 common
+// attributes. CommonAttributes() deep-clones on every call; resolving
+// against one shared copy keeps Match allocation-free on the common path.
+var commonAttrs = scim.CommonAttributes()
+
 type evaluator struct {
-	res    *scim.Resource
-	rt     *scim.ResourceType
-	common []scim.Attribute
+	res *scim.Resource
+	rt  *scim.ResourceType
 }
 
 // resolved carries the schema metadata a path resolved to. target is sub
@@ -60,7 +81,7 @@ func (ev *evaluator) resolve(p Path) (resolved, bool) {
 	}
 	attr := findAttr(attrs, p.Attr)
 	if attr == nil && p.URN == "" {
-		attr = findAttr(ev.common, p.Attr)
+		attr = findAttr(commonAttrs, p.Attr)
 	}
 	if attr == nil {
 		return resolved{}, false
@@ -139,6 +160,12 @@ func (ev *evaluator) validate(e Expr, parent *scim.Attribute) error {
 	case Compare:
 		return ev.validateCompare(&t, parent)
 	case ValuePath:
+		if parent != nil {
+			// The parser never produces this shape (RFC 7644 §3.4.2.2
+			// Figure 1 allows only attrExp and logExp in a valFilter);
+			// a hand-built AST gets the same verdict.
+			return scim.ErrInvalidFilter("value filter on " + t.Path.Attr + " nested inside a value filter")
+		}
 		if r, ok := ev.resolve(t.Path); ok {
 			return ev.validate(t.Filter, r.attr)
 		}

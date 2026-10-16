@@ -11,7 +11,7 @@ formatter:
   scan_folded_as_literal: false
   indentless_arrays: false
   drop_merge_tag: false
-  pad_line_comments: 2
+  pad_line_comments: 1
   trim_trailing_whitespace: true
   # Don't force array/map style - preserve existing flow/block formatting
   # This allows compact inline syntax like {name: foo, key: bar} and [ALL]

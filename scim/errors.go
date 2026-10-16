@@ -2,6 +2,7 @@ package scim
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 )
@@ -32,6 +33,25 @@ type Error struct {
 	ScimType string
 	// Detail is a human-readable description of the failure.
 	Detail string
+}
+
+// Is reports whether target is a *Error with the same Status and, when
+// target carries a ScimType, the same ScimType. Detail never
+// participates, so errors.Is(err, scim.ErrNotFound("")) matches any
+// 404 and errors.Is(err, scim.ErrNoTarget("")) matches any noTarget,
+// however deeply wrapped.
+func (e *Error) Is(target error) bool {
+	t, ok := target.(*Error)
+	if !ok || e.Status != t.Status {
+		return false
+	}
+	return t.ScimType == "" || e.ScimType == t.ScimType
+}
+
+// IsStatus reports whether err is, or wraps, a *Error with the given HTTP
+// status, whatever its ScimType.
+func IsStatus(err error, status int) bool {
+	return errors.Is(err, &Error{Status: status})
 }
 
 // Error implements the error interface.

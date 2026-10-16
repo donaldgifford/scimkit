@@ -1,6 +1,7 @@
 package scimtest
 
 import (
+	"encoding/json"
 	"log/slog"
 
 	"github.com/donaldgifford/scimkit/patch"
@@ -23,14 +24,16 @@ type typeSpec struct {
 // mockConfig accumulates option state before NewMock materializes the
 // stores and handler.
 type mockConfig struct {
-	types    []typeSpec
-	profile  patch.Profile
-	token    string
-	baseURL  string
-	logger   *slog.Logger
-	seed     Seed
-	seedJSON []byte
-	chaos    *ChaosConfig
+	types         []typeSpec
+	noDefaults    bool
+	profile       patch.Profile
+	token         string
+	baseURL       string
+	logger        *slog.Logger
+	seed          Seed
+	seedJSON      []byte
+	chaos         *ChaosConfig
+	recorderLimit int
 }
 
 // defaultConfig is the mock's baseline: strict validation (the scimtest
@@ -58,25 +61,45 @@ func WithBearerToken(token string) Option {
 	return func(c *mockConfig) { c.token = token }
 }
 
-// WithResourceType registers an additional resource type backed by a fresh
-// memstore. Supplying any type replaces the default User+Group pair, so a
-// caller that wants both must register them explicitly alongside a custom
-// type. The store inherits the configured profile; extra memstore options
-// (indexes) are appended.
+// WithResourceType registers a resource type backed by a fresh memstore,
+// alongside the default User and Group types. A type whose name folds
+// equal to a default (e.g. a customized User) replaces that default
+// instead. Use WithoutDefaultTypes to serve only the registered types. The
+// store inherits the configured profile; extra memstore options (indexes)
+// are appended.
 //
 //nolint:gocritic // rt is passed by value to match scim/memstore constructor style
 func WithResourceType(rt scim.ResourceType, opts ...memstore.Option) Option {
 	return func(c *mockConfig) { c.types = append(c.types, typeSpec{rt: rt, opts: opts}) }
 }
 
+// WithoutDefaultTypes drops the built-in User and Group registrations so
+// the mock serves only the types supplied via WithResourceType.
+func WithoutDefaultTypes() Option {
+	return func(c *mockConfig) { c.noDefaults = true }
+}
+
+// WithRecorderLimit keeps only the most recent n requests in the
+// Recorder, bounding memory for long chaos or retry loops. n <= 0 (the
+// default) keeps every request.
+func WithRecorderLimit(n int) Option {
+	return func(c *mockConfig) { c.recorderLimit = max(n, 0) }
+}
+
 // WithSeed preloads the mock with resources before it serves any request.
 // Each resource is created through the real pipeline, so it carries a
-// server-assigned id and meta. Multiple WithSeed/WithSeedJSON options
-// accumulate.
+// server-assigned id and meta. Multiple WithSeed/WithSeedJSON/
+// WithSeedResources options accumulate.
 func WithSeed(seed Seed) Option {
+	return func(c *mockConfig) { c.seed.merge(seed) }
+}
+
+// WithSeedResources preloads bare resource bodies for the resource type
+// with the given declared name (case-insensitive), so custom types
+// registered via WithResourceType can be seeded like Users and Groups.
+func WithSeedResources(typeName string, docs ...json.RawMessage) Option {
 	return func(c *mockConfig) {
-		c.seed.Users = append(c.seed.Users, seed.Users...)
-		c.seed.Groups = append(c.seed.Groups, seed.Groups...)
+		c.seed.merge(Seed{Resources: map[string][]json.RawMessage{typeName: docs}})
 	}
 }
 

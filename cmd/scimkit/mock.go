@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/donaldgifford/scimkit/scimtest"
@@ -21,14 +24,15 @@ func runMock(ctx context.Context, args []string, stdout io.Writer) error {
 	addr := fs.String("addr", ":8080", "listen address")
 	seedPath := fs.String("seed", "", "path to a JSON seed file")
 	profileName := fs.String("profile", "strict", "compatibility profile: strict|default|entra|okta")
-	token := fs.String("token", "", "require this bearer token")
+	token := fs.String("token", "", "require this bearer token (default $"+tokenEnv+")")
 	latency := fs.Duration("latency", 0, "artificial latency added to every response")
 	failRate := fs.Float64("fail-rate", 0, "fraction of requests [0,1] to fail with 503")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	tok := resolveToken(*token)
 
-	opts, err := mockOptions(*profileName, *token, *seedPath, *latency, *failRate)
+	opts, err := mockOptions(*profileName, tok, *seedPath, *latency, *failRate)
 	if err != nil {
 		return err
 	}
@@ -38,13 +42,46 @@ func runMock(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if tok == "" && !isLoopback(*addr) {
+		slog.Warn("scimkit mock serving without a bearer token on a non-loopback address",
+			"addr", *addr, "hint", "pass --token or set "+tokenEnv)
+	}
 
 	srv := &http.Server{
 		Addr:              *addr,
 		Handler:           mock.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	return serve(ctx, srv)
+}
+
+// tokenEnv is the environment fallback for --token on both subcommands,
+// so a secret need not appear in process listings or shell history.
+const tokenEnv = "SCIMKIT_TOKEN" //nolint:gosec // an env var name, not a credential
+
+// resolveToken prefers the flag and falls back to the environment.
+func resolveToken(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return os.Getenv(tokenEnv)
+}
+
+// isLoopback reports whether addr binds only a loopback interface. An
+// unparseable or empty host (e.g. ":8080") binds all interfaces.
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // mockOptions translates the mock flags into scimtest options.
@@ -54,6 +91,12 @@ func mockOptions(
 	profile, err := scimtest.ParseProfileName(profileName)
 	if err != nil {
 		return nil, err
+	}
+	if failRate < 0 || failRate > 1 || math.IsNaN(failRate) {
+		return nil, fmt.Errorf("scimkit mock: --fail-rate %v is outside [0,1]", failRate)
+	}
+	if latency < 0 {
+		return nil, fmt.Errorf("scimkit mock: --latency %v is negative", latency)
 	}
 	opts := []scimtest.Option{scimtest.WithProfile(profile)}
 	if token != "" {

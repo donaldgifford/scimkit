@@ -8,6 +8,13 @@ import (
 // MultiValue is the standard multi-valued element shape (RFC 7643 §2.4)
 // used by emails, phoneNumbers, ims, photos, entitlements, and roles. For
 // photos, Value carries the reference URI as a string.
+//
+// Primary is a plain bool, so the view cannot express an explicit
+// primary:false on the wire: false and unassigned both convert to an
+// element without a primary sub-attribute. The distinction has no
+// semantic weight (§2.4 defines primary only by its single true value),
+// so the view trades it for an ergonomic field. Consumers that must
+// preserve an IdP's explicit false work on the Resource directly.
 type MultiValue struct {
 	Value   string
 	Display string
@@ -46,7 +53,8 @@ type GroupRef struct {
 }
 
 // Certificate is one element of x509Certificates; Value is the raw DER
-// bytes (base64 on the wire).
+// bytes (base64 on the wire). Primary carries the same false-or-unassigned
+// collapse as MultiValue.Primary.
 type Certificate struct {
 	Value   []byte
 	Display string
@@ -87,21 +95,21 @@ type User struct {
 }
 
 // Resource converts the typed view to a canonical Resource backed by the
-// built-in User resource type. It fails on values the schema rejects, such
-// as two elements of one attribute marked primary.
+// built-in User resource type (one shared read-only instance). It fails on
+// values the schema rejects, such as two elements of one attribute marked
+// primary.
 func (u *User) Resource() (*Resource, error) {
-	rt := UserResourceType()
-	r := NewResource(&rt)
+	r := NewResource(sharedUserResourceType())
 	r.SetMeta(u.Meta)
 	fields := []struct {
 		path  string
 		value any
 	}{
-		{"id", stringValue(u.ID)},
-		{"externalId", stringValue(u.ExternalID)},
+		{nameID, stringValue(u.ID)},
+		{nameExternalID, stringValue(u.ExternalID)},
 		{"userName", stringValue(u.UserName)},
-		{"name", u.Name.complexValue()},
-		{"displayName", stringValue(u.DisplayName)},
+		{nameName, u.Name.complexValue()},
+		{nameDisplayName, stringValue(u.DisplayName)},
 		{"nickName", stringValue(u.NickName)},
 		{"profileUrl", stringValue(u.ProfileURL)},
 		{"title", stringValue(u.Title)},
@@ -141,11 +149,11 @@ func UserFromResource(r *Resource) (*User, error) {
 	}
 	u := &User{
 		ID:                getString(r, "id"),
-		ExternalID:        getString(r, "externalId"),
+		ExternalID:        getString(r, nameExternalID),
 		Meta:              r.Meta(),
 		UserName:          getString(r, "userName"),
 		Name:              nameFromResource(r),
-		DisplayName:       getString(r, "displayName"),
+		DisplayName:       getString(r, nameDisplayName),
 		NickName:          getString(r, "nickName"),
 		ProfileURL:        getString(r, "profileUrl"),
 		Title:             getString(r, "title"),
@@ -282,7 +290,7 @@ func putString(cv ComplexValue, foldedKey, s string) {
 }
 
 func nameFromResource(r *Resource) *Name {
-	v, ok := r.Get("name")
+	v, ok := r.Get(nameName)
 	if !ok {
 		return nil
 	}

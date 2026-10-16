@@ -4,8 +4,7 @@
 # Quotation marks are required for the leading asterisk
 go:
   - changed-files:
-      - any-glob-to-any-file: "cmd/**.go"
-      - any-glob-to-any-file: "internal/**.go"
+      - any-glob-to-any-file: "**/*.go"
 
 dependencies:
   - changed-files:
@@ -25,18 +24,25 @@ ci:
   - changed-files:
       - any-glob-to-any-file: .github/**
       - any-glob-to-any-file: justfile
-      - any-glob-to-any-file: Makefile
+      - any-glob-to-any-file: docker.just
+      - any-glob-to-any-file: scripts/**
 repo:
   - changed-files:
-      - any-glob-to-any-file: .codecov.yaml
       - any-glob-to-any-file: .codecov.yml
       - any-glob-to-any-file: .markdownlint.yaml
       - any-glob-to-any-file: .prettierrc.yaml
       - any-glob-to-any-file: .golangci.yml
-      - any-glob-to-any-file: .goreleaser.yaml
+      - any-glob-to-any-file: .goreleaser.yml
       - any-glob-to-any-file: .yamlfmt.yml
       - any-glob-to-any-file: .yamllint.yml
-      - any-glob-to-any-file: scripts/**.sh
+      - any-glob-to-any-file: cliff.toml
+      - any-glob-to-any-file: .docz.yaml
+docker:
+  - changed-files:
+      - any-glob-to-any-file: Dockerfile
+      - any-glob-to-any-file: .dockerignore
+      - any-glob-to-any-file: docker-bake.hcl
+      - any-glob-to-any-file: docker.just
 
 # Add 'feature' label to any PR where the head branch name starts with `feature` or has a `feature` section in the name
 feature:
