@@ -3,9 +3,11 @@ package scimtest
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/donaldgifford/scimkit/scim"
 	"github.com/donaldgifford/scimkit/server"
@@ -32,23 +34,21 @@ type Mock struct {
 	baseURL  string
 }
 
-// NewMock builds a mock service provider. With no resource-type options it
-// serves the library's built-in User and Group types, each backed by a
-// fresh memstore under the configured profile.
+// NewMock builds a mock service provider. It serves the library's built-in
+// User and Group types plus any registered via WithResourceType, each
+// backed by a fresh memstore under the configured profile.
 func NewMock(opts ...Option) (*Mock, error) {
 	cfg := defaultConfig()
 	for _, o := range opts {
 		o(&cfg)
 	}
-	if len(cfg.types) == 0 {
-		cfg.types = []typeSpec{{rt: scim.UserResourceType()}, {rt: scim.GroupResourceType()}}
-	}
+	types := resolveTypes(&cfg)
 
-	regs := make([]server.Registration, 0, len(cfg.types))
-	stores := make(map[string]server.Store, len(cfg.types))
-	endpoints := make(map[string]string, len(cfg.types))
-	for i := range cfg.types {
-		ts := &cfg.types[i]
+	regs := make([]server.Registration, 0, len(types))
+	stores := make(map[string]server.Store, len(types))
+	endpoints := make(map[string]string, len(types))
+	for i := range types {
+		ts := &types[i]
 		storeOpts := append([]memstore.Option{memstore.WithProfile(cfg.profile)}, ts.opts...)
 		st := memstore.New(ts.rt, storeOpts...)
 		regs = append(regs, server.Registration{Type: ts.rt, Store: st})
@@ -86,7 +86,7 @@ func NewMock(opts ...Option) (*Mock, error) {
 	if cfg.chaos != nil {
 		served = newChaosHandler(*cfg.chaos, handler)
 	}
-	rec := &Recorder{}
+	rec := &Recorder{limit: cfg.recorderLimit}
 	return &Mock{
 		handler:  rec.wrap(served),
 		stores:   stores,
@@ -94,6 +94,29 @@ func NewMock(opts ...Option) (*Mock, error) {
 		token:    cfg.token,
 		baseURL:  cfg.baseURL,
 	}, nil
+}
+
+// resolveTypes materializes the registration list: the default User and
+// Group pair (unless WithoutDefaultTypes), with any WithResourceType whose
+// name folds equal to a default replacing it in place, and the rest
+// appended in option order.
+func resolveTypes(cfg *mockConfig) []typeSpec {
+	var types []typeSpec
+	if !cfg.noDefaults {
+		types = []typeSpec{{rt: scim.UserResourceType()}, {rt: scim.GroupResourceType()}}
+	}
+	for i := range cfg.types {
+		custom := &cfg.types[i]
+		idx := slices.IndexFunc(types, func(ts typeSpec) bool {
+			return storeKey(ts.rt.Name) == storeKey(custom.rt.Name)
+		})
+		if idx >= 0 {
+			types[idx] = *custom
+			continue
+		}
+		types = append(types, *custom)
+	}
+	return types
 }
 
 // resolveSeed merges the structured seed with any raw seedJSON supplied via
@@ -107,8 +130,7 @@ func resolveSeed(cfg *mockConfig) (Seed, error) {
 	if err != nil {
 		return Seed{}, err
 	}
-	seed.Users = append(seed.Users, extra.Users...)
-	seed.Groups = append(seed.Groups, extra.Groups...)
+	seed.merge(extra)
 	return seed, nil
 }
 
@@ -130,8 +152,11 @@ func mockAuth(token string) server.Auth {
 	if token == "" {
 		return nil
 	}
+	want := []byte(token)
 	return server.BearerToken(func(_ context.Context, got string) error {
-		if got != token {
+		// Constant-time so the mock does not model a timing side channel
+		// that a consumer might copy into production.
+		if subtle.ConstantTimeCompare([]byte(got), want) != 1 {
 			return errBadToken
 		}
 		return nil

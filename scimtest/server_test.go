@@ -2,6 +2,7 @@ package scimtest_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"testing"
 
@@ -133,17 +134,82 @@ func TestNewMockDefaultTypes(t *testing.T) {
 	assert.NotNil(t, m.Recorder())
 }
 
-func TestNewMockCustomResourceType(t *testing.T) {
-	// Registering a type replaces the default pair.
-	deviceRT := scim.UserResourceType()
-	deviceRT.Name = "Device"
-	deviceRT.Endpoint = "/Devices"
+// customType derives a resource type from the built-in User schema under a
+// new name and endpoint, so it validates like a User but registers apart.
+func customType(name, endpoint string) scim.ResourceType {
+	rt := scim.UserResourceType()
+	rt.Name = name
+	rt.Endpoint = endpoint
+	rt.Description = "custom " + name
+	return rt
+}
 
-	m, err := scimtest.NewMock(scimtest.WithResourceType(deviceRT))
+func TestNewMockResourceTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		opts     []scimtest.Option
+		present  []string
+		absent   []string
+		wantDesc string // description expected in /ResourceTypes when a default was overridden
+	}{
+		{
+			name:    "defaults only",
+			present: []string{"User", "Group"},
+			absent:  []string{"Device"},
+		},
+		{
+			name:    "custom type appends to the defaults",
+			opts:    []scimtest.Option{scimtest.WithResourceType(customType("Device", "/Devices"))},
+			present: []string{"User", "Group", "Device"},
+		},
+		{
+			name: "without defaults serves only registered types",
+			opts: []scimtest.Option{
+				scimtest.WithoutDefaultTypes(),
+				scimtest.WithResourceType(customType("Device", "/Devices")),
+			},
+			present: []string{"Device"},
+			absent:  []string{"User", "Group"},
+		},
+		{
+			name:     "custom type named like a default replaces it",
+			opts:     []scimtest.Option{scimtest.WithResourceType(customType("user", "/Users"))},
+			present:  []string{"User", "Group"},
+			wantDesc: "custom user",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := scimtest.NewServer(t, tt.opts...)
+			for _, name := range tt.present {
+				assert.NotNil(t, srv.Store(name), "store %q should be registered", name)
+			}
+			for _, name := range tt.absent {
+				assert.Nil(t, srv.Store(name), "store %q should not be registered", name)
+			}
+			if tt.wantDesc != "" {
+				assert.Contains(t, discovery(t, srv, "/ResourceTypes"), tt.wantDesc, "override should win")
+			}
+		})
+	}
+}
+
+// discovery fetches a discovery document from the mock as text.
+func discovery(t *testing.T, srv *scimtest.Server, path string) string {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL()+path, http.NoBody)
 	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return string(body)
+}
 
-	assert.NotNil(t, m.Store("Device"))
-	assert.Nil(t, m.Store("User"), "registering a custom type replaces the built-in User+Group")
+func TestWithoutDefaultTypesAlone(t *testing.T) {
+	_, err := scimtest.NewMock(scimtest.WithoutDefaultTypes())
+	require.Error(t, err, "a mock with no resource types is a configuration error")
 }
 
 func TestRecorderResetAndBody(t *testing.T) {

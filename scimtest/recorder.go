@@ -24,8 +24,9 @@ type RecordedRequest struct {
 // change took, what headers a client set, the exact body of a create. It
 // is safe for concurrent use.
 type Recorder struct {
-	mu   sync.Mutex
-	reqs []RecordedRequest
+	mu    sync.Mutex
+	reqs  []RecordedRequest
+	limit int // 0 = unbounded; otherwise keep the most recent limit requests
 }
 
 // Requests returns a copy of every captured request in arrival order.
@@ -46,14 +47,15 @@ func (r *Recorder) Last() (RecordedRequest, bool) {
 	return r.reqs[len(r.reqs)-1], true
 }
 
-// Count returns the number of requests captured so far.
+// Count returns the number of requests currently retained. With a
+// WithRecorderLimit cap this is at most the limit, not the lifetime total.
 func (r *Recorder) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.reqs)
 }
 
-// Reset discards all captured requests.
+// Reset discards all captured requests; the retention limit is kept.
 func (r *Recorder) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -75,15 +77,27 @@ func (r *Recorder) wrap(next http.Handler) http.Handler {
 			_ = req.Body.Close()
 			req.Body = io.NopCloser(bytes.NewReader(body))
 		}
-		r.mu.Lock()
-		r.reqs = append(r.reqs, RecordedRequest{
+		r.record(&RecordedRequest{
 			Method: req.Method,
 			Path:   req.URL.Path,
 			Header: req.Header.Clone(),
 			Body:   body,
 			Time:   time.Now(),
 		})
-		r.mu.Unlock()
 		next.ServeHTTP(w, req)
 	})
+}
+
+// record appends one request, evicting the oldest when a limit is set.
+// The eviction reslices and copies so the retained window never pins the
+// backing array of evicted bodies.
+func (r *Recorder) record(rr *RecordedRequest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reqs = append(r.reqs, *rr)
+	if r.limit > 0 && len(r.reqs) > r.limit {
+		kept := make([]RecordedRequest, r.limit)
+		copy(kept, r.reqs[len(r.reqs)-r.limit:])
+		r.reqs = kept
+	}
 }

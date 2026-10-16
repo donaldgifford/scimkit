@@ -36,7 +36,7 @@ func NewServer(tb testing.TB, opts ...Option) *Server {
 	mock, err := NewMock(append(opts, withBaseURL(ts.URL))...)
 	if err != nil {
 		ts.Close()
-		tb.Fatalf("scimtest: %v", err)
+		tb.Fatal(err)
 		return nil
 	}
 	lazy.set(mock.Handler())
