@@ -156,3 +156,48 @@ func TestErrorWorksWithErrorsAs(t *testing.T) {
 		})
 	}
 }
+
+func TestErrorIs(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		target error
+		want   bool
+	}{
+		{name: "same status and type", err: ErrNoTarget("a"), target: ErrNoTarget("b"), want: true},
+		{name: "empty target type matches any type", err: ErrNoTarget("a"), target: &Error{Status: 400}, want: true},
+		{name: "different type", err: ErrNoTarget("a"), target: ErrInvalidPath("a"), want: false},
+		{name: "different status", err: ErrNotFound("a"), target: ErrPreconditionFailed("a"), want: false},
+		{name: "typed target against untyped error", err: ErrNotFound("a"), target: ErrNoTarget("a"), want: false},
+		{name: "wrapped", err: fmt.Errorf("apply: %w", ErrMutability("x")), target: ErrMutability(""), want: true},
+		{name: "deeply wrapped", err: fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", ErrNotFound("x"))), target: ErrNotFound(""), want: true},
+		{name: "non-scim target", err: ErrNotFound("a"), target: errors.New("boom"), want: false},
+		{name: "non-scim error", err: errors.New("boom"), target: ErrNotFound(""), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, errors.Is(tt.err, tt.target))
+		})
+	}
+}
+
+func TestIsStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		want   bool
+	}{
+		{name: "direct hit", err: ErrNotFound("x"), status: 404, want: true},
+		{name: "typed error by status only", err: ErrUniqueness("x"), status: 409, want: true},
+		{name: "wrapped", err: fmt.Errorf("lookup: %w", ErrPreconditionFailed("x")), status: 412, want: true},
+		{name: "miss", err: ErrNotFound("x"), status: 400, want: false},
+		{name: "nil", err: nil, status: 404, want: false},
+		{name: "plain error", err: errors.New("boom"), status: 500, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsStatus(tt.err, tt.status))
+		})
+	}
+}

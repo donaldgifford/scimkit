@@ -351,6 +351,24 @@ func TestEncodeResourceProjection(t *testing.T) {
 			projection:  Projection{Attributes: []string{"noSuchAttr", "userName"}},
 			wantPresent: []string{`"userName"`},
 		},
+		{
+			name:        "bare extension URN emits the whole container",
+			projection:  Projection{Attributes: []string{SchemaEnterpriseUser}},
+			wantPresent: []string{`"employeeNumber"`, `"manager"`, `"` + SchemaEnterpriseUser + `":{`},
+			wantAbsent:  []string{`"userName"`},
+		},
+		{
+			name:        "bare extension URN folds case",
+			projection:  Projection{Attributes: []string{strings.ToUpper(SchemaEnterpriseUser)}},
+			wantPresent: []string{`"employeeNumber"`},
+			wantAbsent:  []string{`"userName"`},
+		},
+		{
+			name:        "excluded bare extension URN drops the container",
+			projection:  Projection{ExcludedAttributes: []string{SchemaEnterpriseUser}},
+			wantPresent: []string{`"userName"`},
+			wantAbsent:  []string{`"employeeNumber"`, `"` + SchemaEnterpriseUser + `":{`},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -410,4 +428,39 @@ func TestEncodeResourceViaJSONMarshal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(direct), string(viaMarshal))
 	assert.NotContains(t, string(viaMarshal), "secret")
+}
+
+// TestEncodeDateTimePrecision pins that dateTime values keep sub-second
+// precision on the wire and survive a decode → encode → decode round trip
+// unchanged; whole-second instants still render as plain RFC 3339.
+func TestEncodeDateTimePrecision(t *testing.T) {
+	rt := UserResourceType()
+	tests := []struct {
+		name     string
+		created  string
+		wantWire string
+	}{
+		{name: "whole seconds", created: "2011-05-13T04:42:34Z", wantWire: `"created":"2011-05-13T04:42:34Z"`},
+		{name: "milliseconds", created: "2011-05-13T04:42:34.123Z", wantWire: `"created":"2011-05-13T04:42:34.123Z"`},
+		{
+			name:     "nanoseconds",
+			created:  "2011-05-13T04:42:34.123456789Z",
+			wantWire: `"created":"2011-05-13T04:42:34.123456789Z"`,
+		},
+		{name: "offset preserved", created: "2011-05-13T04:42:34.5+02:00", wantWire: `"created":"2011-05-13T04:42:34.5+02:00"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := `{"userName": "b", "meta": {"created": "` + tt.created + `"}}`
+			first, err := DecodeResource([]byte(body), &rt)
+			require.NoError(t, err)
+			wire, err := EncodeResource(first, Projection{})
+			require.NoError(t, err)
+			assert.Contains(t, string(wire), tt.wantWire)
+			second, err := DecodeResource(wire, &rt)
+			require.NoError(t, err)
+			assert.True(t, first.Meta().Created.Equal(second.Meta().Created))
+			assert.Equal(t, first.Meta().Created.Nanosecond(), second.Meta().Created.Nanosecond())
+		})
+	}
 }

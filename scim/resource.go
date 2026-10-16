@@ -98,12 +98,35 @@ func (r *Resource) SetMeta(m Meta) {
 
 // Get returns the stored value at path and whether the attribute is
 // assigned. Paths use standard attribute notation, matched
-// case-insensitively. Unresolvable paths report unassigned.
+// case-insensitively. Unknown paths read as unassigned: a path that does
+// not resolve against the resource type (misspelled attribute, undeclared
+// extension URN, sub-attribute on a non-complex attribute) returns
+// (nil, false) exactly like an unassigned attribute. Use Lookup to tell
+// the two apart.
 func (r *Resource) Get(path string) (any, bool) {
 	rp, err := resolvePath(r.rt, path)
 	if err != nil {
 		return nil, false
 	}
+	return r.get(rp)
+}
+
+// Lookup is Get with the path error surfaced: it returns ErrInvalidPath
+// when path does not resolve against the resource type, and otherwise the
+// stored value and whether the attribute is assigned. Callers validating
+// client-supplied paths (projection parameters, sort keys) need the
+// distinction Get deliberately collapses.
+func (r *Resource) Lookup(path string) (any, bool, error) {
+	rp, err := resolvePath(r.rt, path)
+	if err != nil {
+		return nil, false, err
+	}
+	v, ok := r.get(rp)
+	return v, ok, nil
+}
+
+// get reads a resolved path out of the container.
+func (r *Resource) get(rp resolvedPath) (any, bool) {
 	if rp.common {
 		return r.getCommon(rp)
 	}

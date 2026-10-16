@@ -464,3 +464,46 @@ func TestCloneValueSlices(t *testing.T) {
 		})
 	}
 }
+
+// TestResourceLookup pins the Get/Lookup contrast: Get collapses unknown
+// paths into unassigned, Lookup surfaces them as ErrInvalidPath.
+func TestResourceLookup(t *testing.T) {
+	r := newUserResource(t)
+	require.NoError(t, r.Set("userName", "bjensen"))
+	require.NoError(t, r.Set(SchemaEnterpriseUser+":employeeNumber", "701984"))
+	tests := []struct {
+		name         string
+		path         string
+		want         any
+		wantAssigned bool
+		wantErr      bool
+	}{
+		{name: "assigned", path: "userName", want: "bjensen", wantAssigned: true},
+		{name: "assigned folds case", path: "USERNAME", want: "bjensen", wantAssigned: true},
+		{name: "unassigned", path: "displayName"},
+		{name: "unassigned sub-attribute", path: "name.givenName"},
+		{name: "bare extension URN", path: SchemaEnterpriseUser, want: map[string]any{"employeenumber": "701984"}, wantAssigned: true},
+		{name: "unknown attribute", path: "noSuchAttr", wantErr: true},
+		{name: "unknown extension", path: "urn:example:ext:x", wantErr: true},
+		{name: "sub-attribute of non-complex", path: "userName.x", wantErr: true},
+		{name: "empty", path: "", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, assigned, err := r.Lookup(tt.path)
+			gotGet, assignedGet := r.Get(tt.path)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrInvalidPath(""))
+				assert.False(t, assigned)
+				assert.Nil(t, got)
+				assert.False(t, assignedGet, "Get reads unknown paths as unassigned")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAssigned, assigned)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, assigned, assignedGet)
+			assert.Equal(t, got, gotGet)
+		})
+	}
+}

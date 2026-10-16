@@ -214,7 +214,10 @@ func newProjector(rt *ResourceType, p Projection) *projector {
 }
 
 // indexPaths resolves projection paths to folded attr key → folded sub set;
-// a nil set means the whole attribute. Unresolvable paths are skipped.
+// a nil set means the whole attribute. A bare extension URN selects every
+// attribute of that extension, so attributes=<urn> emits the whole
+// container and the body matches the schemas list. Unresolvable paths are
+// skipped.
 func indexPaths(rt *ResourceType, paths []string) map[string]map[string]bool {
 	if len(paths) == 0 {
 		return nil
@@ -222,7 +225,11 @@ func indexPaths(rt *ResourceType, paths []string) map[string]map[string]bool {
 	out := make(map[string]map[string]bool, len(paths))
 	for _, path := range paths {
 		rp, err := resolvePath(rt, path)
-		if err != nil || rp.attr == nil {
+		if err != nil {
+			continue
+		}
+		if rp.attr == nil {
+			indexExtension(out, rt, rp.urn)
 			continue
 		}
 		key := projKey(rp.urn, rp.attr)
@@ -241,6 +248,18 @@ func indexPaths(rt *ResourceType, paths []string) map[string]map[string]bool {
 		subs[foldName(rp.sub.Name)] = true
 	}
 	return out
+}
+
+// indexExtension marks every attribute of the extension declared with urn
+// as whole-attribute selected.
+func indexExtension(out map[string]map[string]bool, rt *ResourceType, urn string) {
+	ext := extensionSchema(rt, urn)
+	if ext == nil {
+		return
+	}
+	for i := range ext.Attributes {
+		out[projKey(urn, &ext.Attributes[i])] = nil
+	}
 }
 
 func projKey(urn string, a *Attribute) string {
@@ -385,11 +404,15 @@ func encodeValue(attr *Attribute, v any, sel attrSelection) any {
 		}
 		return out
 	case time.Time:
-		return t.Format(time.RFC3339)
+		// RFC3339Nano keeps sub-second precision (trailing zeros trimmed,
+		// so whole-second instants still render as plain RFC 3339) and
+		// round-trips through the decoder, which accepts fractional
+		// seconds. Plain RFC3339 silently truncated to the second.
+		return t.Format(time.RFC3339Nano)
 	case []time.Time:
 		out := make([]string, len(t))
 		for i, ts := range t {
-			out[i] = ts.Format(time.RFC3339)
+			out[i] = ts.Format(time.RFC3339Nano)
 		}
 		return out
 	case []byte:

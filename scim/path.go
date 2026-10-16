@@ -115,15 +115,9 @@ func splitURNPrefix(rt *ResourceType, path string) (urn, attrExpr string, isCore
 	if !strings.HasPrefix(folded, "urn:") {
 		return "", path, false
 	}
-	best := ""
-	for _, candidate := range append([]string{rt.Schema.ID}, extensionIDs(rt)...) {
-		fc := foldName(candidate)
-		if folded != fc && !strings.HasPrefix(folded, fc+":") {
-			continue
-		}
-		if len(candidate) > len(best) {
-			best = candidate
-		}
+	best := urnCandidate("", folded, rt.Schema.ID)
+	for i := range rt.Extensions {
+		best = urnCandidate(best, folded, rt.Extensions[i].Schema.ID)
 	}
 	if best == "" {
 		return "", path, false
@@ -137,12 +131,19 @@ func splitURNPrefix(rt *ResourceType, path string) (urn, attrExpr string, isCore
 	return best, attrExpr, false
 }
 
-func extensionIDs(rt *ResourceType) []string {
-	ids := make([]string, len(rt.Extensions))
-	for i, ext := range rt.Extensions {
-		ids[i] = ext.Schema.ID
+// urnCandidate returns the longer of best and candidate when candidate is
+// a URN prefix of the folded path (exact, or followed by ':'), else best.
+func urnCandidate(best, folded, candidate string) string {
+	if len(candidate) <= len(best) {
+		return best
 	}
-	return ids
+	if len(folded) < len(candidate) || !strings.EqualFold(folded[:len(candidate)], candidate) {
+		return best
+	}
+	if len(folded) > len(candidate) && folded[len(candidate)] != ':' {
+		return best
+	}
+	return candidate
 }
 
 // resolveAttrExpr resolves attrName[.subAttr] within the namespace selected

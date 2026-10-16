@@ -408,3 +408,48 @@ func TestFindAttribute(t *testing.T) {
 		})
 	}
 }
+
+// TestCoerceExported pins the public Coerce entry point against the same
+// conversions Resource.Set applies.
+func TestCoerceExported(t *testing.T) {
+	multi := &Attribute{Name: "emails", Type: TypeComplex, MultiValued: true, SubAttributes: []Attribute{
+		{Name: "value", Type: TypeString},
+		{Name: "primary", Type: TypeBoolean},
+	}}
+	tests := []struct {
+		name    string
+		attr    *Attribute
+		in      any
+		want    any
+		wantErr string
+	}{
+		{name: "string", attr: scalarAttr("userName", TypeString), in: "b", want: "b"},
+		{name: "json number to integer", attr: scalarAttr("n", TypeInteger), in: json.Number("7"), want: int64(7)},
+		{name: "nil is unassigned", attr: scalarAttr("userName", TypeString), in: nil, want: nil},
+		{name: "empty list is unassigned", attr: multi, in: []any{}, want: nil},
+		{
+			name: "decoded elements become stored forms",
+			attr: multi,
+			in:   []any{map[string]any{"Value": "a", "unknown": 1}},
+			want: MultiComplexValue{{"value": "a"}},
+		},
+		{name: "type mismatch", attr: scalarAttr("active", TypeBoolean), in: "true", wantErr: "expected boolean"},
+		{
+			name:    "two primaries",
+			attr:    multi,
+			in:      []any{map[string]any{"primary": true}, map[string]any{"primary": true}},
+			wantErr: "more than one element has primary",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Coerce(tt.attr, tt.in)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

@@ -23,10 +23,9 @@ type Group struct {
 }
 
 // Resource converts the typed view to a canonical Resource backed by the
-// built-in Group resource type.
+// built-in Group resource type (one shared read-only instance).
 func (g *Group) Resource() (*Resource, error) {
-	rt := GroupResourceType()
-	r := NewResource(&rt)
+	r := NewResource(sharedGroupResourceType())
 	r.SetMeta(g.Meta)
 	fields := []struct {
 		path  string
