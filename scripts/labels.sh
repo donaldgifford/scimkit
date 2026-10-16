@@ -6,7 +6,7 @@
 # if they don't already exist.
 #
 # Usage:
-#   ./tools/labels.sh [--dry-run] [--force]
+#   ./scripts/labels.sh [--dry-run] [--force]
 #
 # Options:
 #   --dry-run    Show what would be created without making changes
@@ -34,7 +34,6 @@ declare -A LABEL_COLORS=(
   ["dependencies"]="0366D6"  # Blue - dependencies
   ["documentation"]="0075CA" # Light blue - docs
   ["ci"]="C5DEF5"            # Pale blue - automation
-  ["ai"]="D876E3"            # Purple - AI/ML
   ["repo"]="EDEDED"          # Gray - repo config
   ["docker"]="0DB7ED"        # Docker blue
 
@@ -55,11 +54,10 @@ declare -A LABEL_COLORS=(
 
 declare -A LABEL_DESCRIPTIONS=(
   # From labeler.yml
-  ["go"]="Changes to Go code (cmd/, internal/, pkg/)"
+  ["go"]="Changes to Go code"
   ["dependencies"]="Dependency updates (go.mod, go.sum, mise.toml)"
   ["documentation"]="Documentation changes (docs/, README.md)"
   ["ci"]="CI/CD pipeline changes (.github/)"
-  ["ai"]="AI-related changes (docs/ai/, CLAUDE.md)"
   ["repo"]="Repository configuration (linters, codecov, etc.)"
   ["docker"]="Docker-related changes (Dockerfile)"
   # used in git-workflow claude skill

@@ -96,9 +96,6 @@ linters:
       check-blank: true
       exclude-functions:
         - (io.Closer).Close  # Common pattern to defer close
-        - (*github.com/fatih/color.Color).Printf  # CLI color output to stdout.
-        - (*github.com/fatih/color.Color).Println  # CLI color output to stdout.
-        - (*github.com/spf13/cobra.Command).MarkFlagRequired  # Only fails if flag name is wrong.
 
     errorlint:
       errorf: true
@@ -216,39 +213,9 @@ linters:
           - gocognit
           - goconst
           - gosec
-          - dupl
           - nilnil
 
-      # Main files often have init functions
-      - path: ./main.go
-        linters:
-          - gochecknoinits
-
-      # Generated files
-      - path: ".*\\.pb\\.go$"
-        linters:
-          - all
-
-      # Mock files
-      - path: mock_.*\.go$
-        linters:
-          - revive
-          - gocritic
-          - unparam
-          - errcheck
-          - nilnil
-          - funlen
-
-      # Allow long lines in struct tags
-      - linters:
-          - lll
-        source: "^\\s*\\w+\\s+\\w+\\s+`.*`$"
-
-      - linters:
-          - gosec
-        text: "G306:"
-
-      # CLI tool reads user-specified file paths by design.
+      # The CLI reads user-specified file paths (--seed) by design.
       - linters:
           - gosec
         text: "G304:"
@@ -258,12 +225,6 @@ linters:
       - linters:
           - gosec
         path: internal/schemagen/
-
-      # CLI color output to stdout; errors are not actionable.
-      - linters:
-          - gosec
-        text: "G104:"
-        path: cmd/(compare|diff)\.go$
 
     paths:
       - vendor

@@ -1,58 +1,34 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Go-specific (supplements registry-root .gitignore)
+# Go build + test artifacts
 *.test
-*.out
-*.exe
-coverage.txt
-coverage.html
-
-# Build output
-/dist/
-/bin/
-/scimkit
-
-# IDE
-.vscode/
-.idea/
-
-# Local env
-.env
-.env.local
-
-# Binaries for programs and plugins
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# Code coverage profiles and other test artifacts
+# Coverage profiles
 *.out
-coverage.*
 *.coverprofile
+coverage.*
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Build output
+/build/
+/dist/
+/bin/
+/scimkit
 
-# Go workspace file
+# Go workspace
 go.work
 go.work.sum
 
-# env file
-.env
-
-# Editor/IDE
+# Editor / IDE
 .idea/
 .vscode/
 
-# Build directories
-build/
-
-# Goreleaser snapshot output (created by `make release-local`)
-dist/
+# Local env
+.env
+.env.local
 
 # donald-loop runtime state
 .claude/donald-loop.local.md
