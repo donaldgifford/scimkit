@@ -13,6 +13,11 @@ import (
 // than one resource.
 var ErrAmbiguousLookup = errors.New("scimkit client: filter matched more than one resource")
 
+// ErrPaginationStalled is yielded by List when the server returns the
+// same page for consecutive startIndex values — a target that ignores
+// pagination parameters and would otherwise be walked forever.
+var ErrPaginationStalled = errors.New("scimkit client: pagination stalled")
+
 // ConflictError reports a failed If-Match precondition (HTTP 412): the
 // resource changed on the server since the version the write asserted. It
 // wraps the protocol error, so errors.As(err, &scimErr) still works.

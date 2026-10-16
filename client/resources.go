@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -83,7 +84,7 @@ func (s *ResourceService) Patch(ctx context.Context, id string, ops []patch.Op) 
 		// be tried natively and caught by the reactive 501 fallback
 		// below, not fail here.
 		if caps, err := s.client.Capabilities(ctx); err != nil {
-			s.client.logger.Debug("scim client: capability check failed, attempting native PATCH", "err", err)
+			s.client.logCapabilityFailure(err)
 		} else if !caps.PatchSupported {
 			return s.replaceViaPatch(ctx, id, ops)
 		}
@@ -93,6 +94,21 @@ func (s *ResourceService) Patch(ctx context.Context, id string, ops []patch.Op) 
 		return res, err
 	}
 	return s.replaceViaPatch(ctx, id, ops)
+}
+
+// logCapabilityFailure reports a failed capability probe. A protocol
+// error (typically 401/403 on /ServiceProviderConfig) is logged at Warn
+// once per client so a misconfigured token is visible before the first
+// PATCH fails; anything else stays at Debug.
+func (c *Client) logCapabilityFailure(err error) {
+	if scimErr, ok := errors.AsType[*scim.Error](err); ok {
+		c.capsWarnOnce.Do(func() {
+			c.logger.Warn("scim client: capability check failed, attempting native PATCH",
+				"status", scimErr.Status, "err", err)
+		})
+		return
+	}
+	c.logger.Debug("scim client: capability check failed, attempting native PATCH", "err", err)
 }
 
 // patchRequest issues the native PATCH and fills an empty response body

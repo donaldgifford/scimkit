@@ -47,6 +47,6 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, memberID strin
 // some targets wrongly return for a valuePath remove that matches
 // nothing (RFC 7644 Table 4 says it MUST NOT fail).
 func isNoTarget(err error) bool {
-	var scimErr *scim.Error
-	return errors.As(err, &scimErr) && scimErr.ScimType == scim.ScimTypeNoTarget
+	scimErr, ok := errors.AsType[*scim.Error](err)
+	return ok && scimErr.ScimType == scim.ScimTypeNoTarget
 }

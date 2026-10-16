@@ -23,21 +23,62 @@ type Capabilities struct {
 	ChangePasswordSupported bool
 }
 
+// capsFetch is one in-flight ServiceProviderConfig fetch shared by every
+// concurrent Capabilities caller (single-flight), so a cold cache costs
+// one round trip and a hung endpoint never holds the cache lock.
+type capsFetch struct {
+	done chan struct{}
+	caps Capabilities
+	err  error
+}
+
 // Capabilities fetches and caches the target's ServiceProviderConfig.
 // The result is cached for the client's lifetime; a transient fetch
 // failure is not cached. Use InvalidateCapabilities to force a refetch.
+//
+// Concurrent callers on a cold cache share one fetch. The fetch runs
+// detached from the first caller's cancellation (bounded by the HTTP
+// client's timeout and the retry policy) so that one caller giving up
+// does not fail the others; each caller still returns as soon as its
+// own context is done.
 func (c *Client) Capabilities(ctx context.Context) (Capabilities, error) {
 	c.capsMu.Lock()
-	defer c.capsMu.Unlock()
 	if c.caps != nil {
-		return *c.caps, nil
+		caps := *c.caps
+		c.capsMu.Unlock()
+		return caps, nil
 	}
-	caps, err := c.fetchCapabilities(ctx)
-	if err != nil {
-		return Capabilities{}, err
+	f := c.capsInflight
+	if f == nil {
+		f = &capsFetch{done: make(chan struct{})}
+		c.capsInflight = f
+		go c.runCapsFetch(context.WithoutCancel(ctx), f)
 	}
-	c.caps = &caps
-	return caps, nil
+	c.capsMu.Unlock()
+
+	select {
+	case <-f.done:
+		return f.caps, f.err
+	case <-ctx.Done():
+		return Capabilities{}, fmt.Errorf("scimkit client: capabilities: %w", ctx.Err())
+	}
+}
+
+// runCapsFetch performs the shared fetch, publishes a success into the
+// cache, and releases the in-flight slot so a failure is retried by the
+// next caller rather than cached.
+func (c *Client) runCapsFetch(ctx context.Context, f *capsFetch) {
+	f.caps, f.err = c.fetchCapabilities(ctx)
+	c.capsMu.Lock()
+	if f.err == nil {
+		caps := f.caps
+		c.caps = &caps
+	}
+	if c.capsInflight == f {
+		c.capsInflight = nil
+	}
+	c.capsMu.Unlock()
+	close(f.done)
 }
 
 // InvalidateCapabilities clears the cached ServiceProviderConfig so the
