@@ -97,11 +97,11 @@ func (u *User) Resource() (*Resource, error) {
 		path  string
 		value any
 	}{
-		{"id", stringValue(u.ID)},
-		{"externalId", stringValue(u.ExternalID)},
+		{nameID, stringValue(u.ID)},
+		{nameExternalID, stringValue(u.ExternalID)},
 		{"userName", stringValue(u.UserName)},
-		{"name", u.Name.complexValue()},
-		{"displayName", stringValue(u.DisplayName)},
+		{nameName, u.Name.complexValue()},
+		{nameDisplayName, stringValue(u.DisplayName)},
 		{"nickName", stringValue(u.NickName)},
 		{"profileUrl", stringValue(u.ProfileURL)},
 		{"title", stringValue(u.Title)},
@@ -141,11 +141,11 @@ func UserFromResource(r *Resource) (*User, error) {
 	}
 	u := &User{
 		ID:                getString(r, "id"),
-		ExternalID:        getString(r, "externalId"),
+		ExternalID:        getString(r, nameExternalID),
 		Meta:              r.Meta(),
 		UserName:          getString(r, "userName"),
 		Name:              nameFromResource(r),
-		DisplayName:       getString(r, "displayName"),
+		DisplayName:       getString(r, nameDisplayName),
 		NickName:          getString(r, "nickName"),
 		ProfileURL:        getString(r, "profileUrl"),
 		Title:             getString(r, "title"),
@@ -282,7 +282,7 @@ func putString(cv ComplexValue, foldedKey, s string) {
 }
 
 func nameFromResource(r *Resource) *Name {
-	v, ok := r.Get("name")
+	v, ok := r.Get(nameName)
 	if !ok {
 		return nil
 	}

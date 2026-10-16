@@ -18,7 +18,7 @@ var commonAttributes = []Attribute{
 		Uniqueness: UniquenessServer,
 	},
 	{
-		Name:       "externalId",
+		Name:       nameExternalID,
 		Type:       TypeString,
 		CaseExact:  true,
 		Mutability: MutabilityReadWrite,

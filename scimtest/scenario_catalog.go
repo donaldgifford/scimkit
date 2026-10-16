@@ -22,9 +22,19 @@ const (
 const (
 	usersEndpoint  = "/Users"
 	groupsEndpoint = "/Groups"
-	userSchema     = "urn:ietf:params:scim:schemas:core:2.0:User"
-	groupSchema    = "urn:ietf:params:scim:schemas:core:2.0:Group"
-	patchSchema    = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+
+	// Templated per-resource paths resolved against captured ids.
+	userPath  = "/Users/{{.uid}}"
+	groupPath = "/Groups/{{.gid}}"
+
+	// Shared step names and body-assertion paths.
+	stepCreateUser   = "create user"
+	pathActive       = "active"
+	pathTotalResults = "totalResults"
+	pathMembers      = "members"
+	userSchema       = "urn:ietf:params:scim:schemas:core:2.0:User"
+	groupSchema      = "urn:ietf:params:scim:schemas:core:2.0:Group"
+	patchSchema      = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
 )
 
 // ScenarioNames lists the built-in scenarios in catalog order.
@@ -156,23 +166,23 @@ func rfcStrictLifecycle() (Scenario, error) {
 	activePatch := jsonf(`{"schemas":[%q],"Operations":[{"op":"replace","path":"active","value":false}]}`, patchSchema)
 	var b scenarioBuilder
 	b.step(Step{
-		Name: "create user", Method: http.MethodPost, Path: usersEndpoint, Body: create,
+		Name: stepCreateUser, Method: http.MethodPost, Path: usersEndpoint, Body: create,
 		Capture: captureID("uid"),
 		Expect:  Expectation{Status: http.StatusCreated, Body: assertUserName("rfc.user@example.com")},
 	}).step(Step{
-		Name: "get user", Method: http.MethodGet, Path: "/Users/{{.uid}}",
+		Name: "get user", Method: http.MethodGet, Path: userPath,
 		Expect: Expectation{Status: http.StatusOK, Body: assertUserName("rfc.user@example.com")},
 	}).step(Step{
-		Name: "deactivate via RFC patch", Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: activePatch,
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "active", Value: false}}},
+		Name: "deactivate via RFC patch", Method: http.MethodPatch, Path: userPath, Body: activePatch,
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathActive, Value: false}}},
 	}).step(Step{
 		Name: "lookup finds one", Method: http.MethodGet, Path: userFilterPath("rfc.user@example.com"),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "totalResults", Value: 1}}},
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathTotalResults, Value: 1}}},
 	}).step(Step{
-		Name: "delete user", Method: http.MethodDelete, Path: "/Users/{{.uid}}",
+		Name: "delete user", Method: http.MethodDelete, Path: userPath,
 		Expect: Expectation{Status: http.StatusNoContent},
 	}).step(Step{
-		Name: "get after delete is 404", Method: http.MethodGet, Path: "/Users/{{.uid}}",
+		Name: "get after delete is 404", Method: http.MethodGet, Path: userPath,
 		Expect: Expectation{Status: http.StatusNotFound},
 	})
 	return b.build(ScenarioRFCStrictLifecycle,
@@ -186,16 +196,16 @@ func entraUserLifecycle(fx fixtureSet) (Scenario, error) {
 		`"name":{"givenName":"Barb","familyName":"Jensen"},"active":true}`, userSchema)
 	b := scenarioBuilder{fx: fx}
 	b.step(Step{
-		Name: "create user", Method: http.MethodPost, Path: usersEndpoint, Body: create,
+		Name: stepCreateUser, Method: http.MethodPost, Path: usersEndpoint, Body: create,
 		Capture: captureID("uid"),
-		Expect:  Expectation{Status: http.StatusCreated, Body: []BodyAssertion{{Path: "active", Value: true}}},
+		Expect:  Expectation{Status: http.StatusCreated, Body: []BodyAssertion{{Path: pathActive, Value: true}}},
 	}).step(Step{
 		Name:   "deactivate (wrapped-string replace)",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("entra/replace-active-wrapped-string"),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "active", Value: false}}},
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("entra/replace-active-wrapped-string"),
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathActive, Value: false}}},
 	}).step(Step{
 		Name:   "profile update (pathless flattened keys)",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("entra/pathless-replace-flattened-keys"),
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("entra/pathless-replace-flattened-keys"),
 		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{
 			{Path: "displayName", Value: "Babs Jensen"},
 			{Path: "name.givenName", Value: "Barbara"},
@@ -203,7 +213,7 @@ func entraUserLifecycle(fx fixtureSet) (Scenario, error) {
 		}},
 	}).step(Step{
 		Name:   "set manager (value object)",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("entra/add-manager-value-object"),
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("entra/add-manager-value-object"),
 		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{
 			{
 				Path:  "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.manager.value",
@@ -212,11 +222,11 @@ func entraUserLifecycle(fx fixtureSet) (Scenario, error) {
 		}},
 	}).step(Step{
 		Name:   "add address (valuePath synthesis)",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("entra/add-valuepath-synthesizes-element"),
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("entra/add-valuepath-synthesizes-element"),
 		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "addresses", Len: lenOf(1)}}},
 	}).step(Step{
-		Name: "confirm", Method: http.MethodGet, Path: "/Users/{{.uid}}",
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "active", Value: false}}},
+		Name: "confirm", Method: http.MethodGet, Path: userPath,
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathActive, Value: false}}},
 	})
 	return b.build(ScenarioEntraUserLifecycle,
 		"Entra ID user lifecycle: wrapped-string deactivate, flattened-key profile edit, manager, address")
@@ -245,15 +255,15 @@ func entraGroupMembership() (Scenario, error) {
 	for i := 1; i <= 3; i++ {
 		b.step(Step{
 			Name:   fmt.Sprintf("add member %d", i),
-			Method: http.MethodPatch, Path: "/Groups/{{.gid}}",
+			Method: http.MethodPatch, Path: groupPath,
 			Body: jsonf(`{"schemas":[%q],"Operations":[{"op":"add","path":"members","value":[{"value":"{{.u%d}}"}]}]}`,
 				patchSchema, i),
 			Expect: Expectation{Status: http.StatusOK},
 		})
 	}
 	b.step(Step{
-		Name: "confirm three members", Method: http.MethodGet, Path: "/Groups/{{.gid}}",
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "members", Len: lenOf(3)}}},
+		Name: "confirm three members", Method: http.MethodGet, Path: groupPath,
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathMembers, Len: lenOf(3)}}},
 	})
 	return b.build(ScenarioEntraGroupMembership,
 		"Group membership built one member per PATCH, the way IdPs actually provision it")
@@ -268,21 +278,21 @@ func oktaUserLifecycle(fx fixtureSet) (Scenario, error) {
 	b := scenarioBuilder{fx: fx}
 	b.step(Step{
 		Name: "lookup before create", Method: http.MethodGet, Path: userFilterPath(uname),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "totalResults", Value: 0}}},
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathTotalResults, Value: 0}}},
 	}).step(Step{
-		Name: "create user", Method: http.MethodPost, Path: usersEndpoint, Body: create,
+		Name: stepCreateUser, Method: http.MethodPost, Path: usersEndpoint, Body: create,
 		Capture: captureID("uid"),
 		Expect:  Expectation{Status: http.StatusCreated},
 	}).step(Step{
-		Name: "full replace (PUT)", Method: http.MethodPut, Path: "/Users/{{.uid}}", Body: put,
+		Name: "full replace (PUT)", Method: http.MethodPut, Path: userPath, Body: put,
 		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "displayName", Value: "Okta User"}}},
 	}).step(Step{
 		Name:   "deactivate (pathless plain-key replace)",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("okta/pathless-replace-plain-keys"),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "active", Value: false}}},
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("okta/pathless-replace-plain-keys"),
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathActive, Value: false}}},
 	}).step(Step{
 		Name: "lookup after create", Method: http.MethodGet, Path: userFilterPath(uname),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "totalResults", Value: 1}}},
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathTotalResults, Value: 1}}},
 	})
 	return b.build(ScenarioOktaUserLifecycle,
 		"Okta user lifecycle: lookup, create, PUT replace, pathless-replace deactivate")
@@ -300,17 +310,17 @@ func oktaGroupPUT(fx fixtureSet) (Scenario, error) {
 	b.step(Step{
 		Name: "create group with two members", Method: http.MethodPost, Path: groupsEndpoint, Body: create,
 		Capture: captureID("gid"),
-		Expect:  Expectation{Status: http.StatusCreated, Body: []BodyAssertion{{Path: "members", Len: lenOf(2)}}},
+		Expect:  Expectation{Status: http.StatusCreated, Body: []BodyAssertion{{Path: pathMembers, Len: lenOf(2)}}},
 	}).step(Step{
 		Name:   "remove one member by value",
-		Method: http.MethodPatch, Path: "/Groups/{{.gid}}", Body: b.corpus("okta/remove-member-by-value"),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "members", Len: lenOf(1)}}},
+		Method: http.MethodPatch, Path: groupPath, Body: b.corpus("okta/remove-member-by-value"),
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathMembers, Len: lenOf(1)}}},
 	}).step(Step{
-		Name: "PUT without members wipes them", Method: http.MethodPut, Path: "/Groups/{{.gid}}", Body: put,
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "members", Unassigned: true}}},
+		Name: "PUT without members wipes them", Method: http.MethodPut, Path: groupPath, Body: put,
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathMembers, Unassigned: true}}},
 	}).step(Step{
-		Name: "confirm members gone", Method: http.MethodGet, Path: "/Groups/{{.gid}}",
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "members", Unassigned: true}}},
+		Name: "confirm members gone", Method: http.MethodGet, Path: groupPath,
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathMembers, Unassigned: true}}},
 	})
 	return b.build(ScenarioOktaGroupPUT,
 		"Okta group PUT: remove a member, then a members-less PUT that wipes the rest (RFC 3.5.1)")
@@ -327,24 +337,24 @@ func oneLoginLookupDance(fx fixtureSet) (Scenario, error) {
 	b := scenarioBuilder{fx: fx}
 	b.step(Step{
 		Name: "lookup before create", Method: http.MethodGet, Path: userFilterPath("bjensen@example.com"),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "totalResults", Value: 0}}},
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathTotalResults, Value: 0}}},
 	}).step(Step{
-		Name: "create user", Method: http.MethodPost, Path: usersEndpoint, Body: create,
+		Name: stepCreateUser, Method: http.MethodPost, Path: usersEndpoint, Body: create,
 		Capture: captureID("uid"),
 		Expect:  Expectation{Status: http.StatusCreated, Body: []BodyAssertion{{Path: "emails", Len: lenOf(2)}}},
 	}).step(Step{
 		Name:   "rename username",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("onelogin/replace-username"),
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("onelogin/replace-username"),
 		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{
 			{Path: "userName", Value: "barbara.jensen@example.com"},
 		}},
 	}).step(Step{
 		Name:   "remove home email by filter",
-		Method: http.MethodPatch, Path: "/Users/{{.uid}}", Body: b.corpus("onelogin/remove-email-by-filter"),
+		Method: http.MethodPatch, Path: userPath, Body: b.corpus("onelogin/remove-email-by-filter"),
 		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "emails", Len: lenOf(1)}}},
 	}).step(Step{
 		Name: "lookup after rename correlates", Method: http.MethodGet, Path: userFilterPath("barbara.jensen@example.com"),
-		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: "totalResults", Value: 1}}},
+		Expect: Expectation{Status: http.StatusOK, Body: []BodyAssertion{{Path: pathTotalResults, Value: 1}}},
 	}).step(Step{
 		Name: "create Sales group", Method: http.MethodPost, Path: groupsEndpoint, Body: sales,
 		Expect: Expectation{Status: http.StatusCreated},

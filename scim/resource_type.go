@@ -6,7 +6,7 @@ package scim
 // returns a fresh value that is safe to modify.
 func UserResourceType() ResourceType {
 	return ResourceType{
-		Name:        "User",
+		Name:        typeNameUser,
 		Description: "User Account",
 		Endpoint:    "/Users",
 		Schema:      UserSchema(),
@@ -21,8 +21,8 @@ func UserResourceType() ResourceType {
 // is safe to modify.
 func GroupResourceType() ResourceType {
 	return ResourceType{
-		Name:        "Group",
-		Description: "Group",
+		Name:        typeNameGroup,
+		Description: typeNameGroup,
 		Endpoint:    "/Groups",
 		Schema:      GroupSchema(),
 	}

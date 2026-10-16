@@ -309,7 +309,7 @@ type jsonField struct {
 }
 
 func appendCommonFields(fields []jsonField, r *Resource, pr *projector) []jsonField {
-	for _, name := range []string{"id", "externalId"} {
+	for _, name := range []string{nameID, nameExternalID} {
 		attr := findAttribute(commonAttributes, name)
 		sel := pr.selection("", attr)
 		if !sel.include {
