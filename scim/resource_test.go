@@ -507,3 +507,85 @@ func TestResourceLookup(t *testing.T) {
 		})
 	}
 }
+
+// TestResourceCloneShared pins the shared-leaf clone: every Set/Unassign
+// on the copy leaves the original untouched, the containers Set edits in
+// place are copied, and multi-valued leaves are shared by reference.
+func TestResourceCloneShared(t *testing.T) {
+	seed := func(t *testing.T, r *Resource) {
+		t.Helper()
+		require.NoError(t, r.Set("userName", "bjensen"))
+		require.NoError(t, r.Set("name", map[string]any{"givenName": "Barbara", "familyName": "Jensen"}))
+		require.NoError(t, r.Set("emails", []any{map[string]any{"value": "a@b.c", "type": "work"}}))
+		require.NoError(t, r.Set("x509Certificates", []any{map[string]any{"value": []byte{1, 2}}}))
+		require.NoError(t, r.Set(enterpriseAttr, "701984"))
+		require.NoError(t, r.Set(SchemaEnterpriseUser+":manager", map[string]any{"value": "m1"}))
+	}
+	tests := []struct {
+		name   string
+		mutate func(t *testing.T, c *Resource)
+	}{
+		{name: "replace scalar", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Set("userName", "changed"))
+		}},
+		{name: "unassign scalar", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Unassign("userName"))
+		}},
+		{name: "set sub-attribute in place", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Set("name.givenName", "changed"))
+		}},
+		{name: "unassign sub-attribute in place", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Unassign("name.familyName"))
+		}},
+		{name: "replace multi-valued", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Set("emails", []any{map[string]any{"value": "z@z.z"}}))
+		}},
+		{name: "unassign multi-valued", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Unassign("emails"))
+		}},
+		{name: "extension scalar", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Set(enterpriseAttr, "changed"))
+		}},
+		{name: "extension sub-attribute in place", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Set(SchemaEnterpriseUser+":manager.displayName", "Boss"))
+		}},
+		{name: "drop whole extension", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			require.NoError(t, c.Unassign(SchemaEnterpriseUser))
+		}},
+		{name: "meta", mutate: func(t *testing.T, c *Resource) {
+			t.Helper()
+			c.SetMeta(Meta{Version: "v2"})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newUserResource(t)
+			seed(t, r)
+			r.SetMeta(Meta{Version: "v1"})
+			snapshot := r.Clone()
+			c := r.CloneShared()
+			tt.mutate(t, c)
+			assert.Equal(t, snapshot, r, "original must not change")
+			assert.NotEqual(t, snapshot, c)
+			assert.Same(t, r.ResourceType(), c.ResourceType())
+		})
+	}
+
+	t.Run("multi-valued leaves are shared", func(t *testing.T) {
+		r := newUserResource(t)
+		seed(t, r)
+		c := r.CloneShared()
+		orig, _ := r.Get("emails")
+		copied, _ := c.Get("emails")
+		assert.Same(t, &orig.(MultiComplexValue)[0], &copied.(MultiComplexValue)[0])
+	})
+}

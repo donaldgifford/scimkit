@@ -71,6 +71,12 @@ func coerceValue(a *Attribute, v any) (any, error) {
 }
 
 func coerceSingle(a *Attribute, v any) (any, error) {
+	if isStoredScalar(a.Type, v) {
+		// Already canonical: hand back the same interface value rather
+		// than unboxing and re-boxing it, which would allocate once per
+		// value on every re-coercion of an existing list.
+		return v, nil
+	}
 	switch a.Type {
 	case TypeString:
 		return coerceString(v)
@@ -96,6 +102,28 @@ func coerceSingle(a *Attribute, v any) (any, error) {
 		return cv, nil
 	default:
 		return nil, fmt.Errorf("attribute %q: unknown type %q", a.Name, a.Type)
+	}
+}
+
+// isStoredScalar reports whether v is already the immutable stored form
+// for a scalar attribute type. Binary ([]byte) is excluded: it is
+// mutable and must be cloned at the boundary.
+func isStoredScalar(t AttrType, v any) bool {
+	switch v.(type) {
+	case string:
+		return t == TypeString
+	case bool:
+		return t == TypeBoolean
+	case float64:
+		return t == TypeDecimal
+	case int64:
+		return t == TypeInteger
+	case time.Time:
+		return t == TypeDateTime
+	case ReferenceValue:
+		return t == TypeReference
+	default:
+		return false
 	}
 }
 

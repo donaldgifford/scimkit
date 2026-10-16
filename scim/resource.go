@@ -366,6 +366,39 @@ func (r *Resource) Clone() *Resource {
 	return &Resource{rt: r.rt, attrs: cloneStringMap(r.attrs), meta: r.meta}
 }
 
+// CloneShared returns a copy whose attribute containers are independent
+// of r but whose leaf values are shared: the top-level container, each
+// extension container, and each single-valued complex value are copied,
+// while multi-valued values and binary values are referenced, not
+// duplicated. Those are exactly the structures Set edits in place versus
+// replaces wholesale, so Set/Unassign on either resource never affects
+// the other. The two stay independent as long as no caller mutates a
+// value obtained from Get, which the Get contract already forbids. It is
+// the clone for engines that write only through Set and treat stored
+// values as read-only (the PATCH applier): Clone would copy every element
+// of a large multi-valued attribute to change one.
+func (r *Resource) CloneShared() *Resource {
+	return &Resource{rt: r.rt, attrs: cloneContainer(r.attrs), meta: r.meta}
+}
+
+// cloneContainer copies one attribute container, recursing into
+// extension containers and single-valued complex values and sharing
+// every other stored value.
+func cloneContainer(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		switch t := v.(type) {
+		case map[string]any:
+			out[k] = cloneContainer(t)
+		case ComplexValue:
+			out[k] = ComplexValue(cloneContainer(t))
+		default:
+			out[k] = v
+		}
+	}
+	return out
+}
+
 func cloneStringMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {
