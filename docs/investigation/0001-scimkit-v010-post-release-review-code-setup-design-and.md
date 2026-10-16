@@ -150,7 +150,7 @@ Scaffold leftovers from phase 0 were never fully cleaned:
 | `changelog.yml` / `changelog-regen.yml` | Regen auto-commits on main *after* merge, so any un-rebased PR sees drift; `cliff.toml`'s skip `^chore.*[Cc]hangelog` is case-sensitive (`CHANGELOG` is not skipped, bit PR #2) | med |
 | `release.yml` | Publish Image job (added in PR #2) is unverified in a real release; image is not cosign-signed although `docker-bake.hcl` comments assume it; `needs: bump-version` only, so the image can publish when goreleaser fails | med |
 | `.github/labeler.yml` | `go:` label matches only `cmd/**.go` and `internal/**.go`; the six library packages never get it; `repo:` lists `.goreleaser.yaml`/`.codecov.yaml` (repo uses `.yml`) | med |
-| `.github/dependabot.yml` + `pr-labels.yml` | Renovate PRs must carry a semver label or `pr-labels.yml` blocks them; verify the upstream preset adds `dont-release`/`patch` | med |
+| `.github/dependabot.yml` + `pr-labels.yml` | Renovate PRs must carry a semver label or `pr-labels.yml` blocks them. Verified: the upstream presets add `patch`/`minor` (go) and `dont-release` (ci, mise, docker), so no gap | info |
 | `mise.toml` + `ci.yml` | golangci-lint version pinned in both (`2.11.4` / `v2.11.4`); CI should read the mise pin | med |
 | `security.yml`, `codeql.yml` | Stale comments: links to `oapi-codegen`'s scanning tab; codeql says "same slot as security.yml's grype" but security.yml runs govulncheck | low |
 | `pr-labels.yml`, `license-check.yml`, `actionlint.yml` | Malformed `$schema` URL (`https://schemastore.org/https://www.schemastore.org/...`) | low |
